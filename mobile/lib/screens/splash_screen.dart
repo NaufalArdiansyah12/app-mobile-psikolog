@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_screen.dart';
+import '../widgets/rive_illustration.dart';
 
 class WalkthroughSlide {
   final String title;
@@ -287,14 +288,10 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
             ],
           ),
-          child: Image.asset(
-            'assets/illustrations/chat_bubble_3d.png',
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) => const Icon(
-              Icons.chat_bubble_outline_rounded,
-              size: 50,
-              color: Color(0xFF0A0A0A),
-            ),
+          child: const RiveIllustration(
+            asset: 'assets/rive/chat_app_animation.riv',
+            fallbackIcon: Icons.chat_bubble_outline_rounded,
+            fallbackColor: Color(0xFF0A0A0A),
           ),
         ),
       ],
@@ -346,16 +343,10 @@ class _SplashScreenState extends State<SplashScreen> {
                   end: Alignment.bottomRight,
                 ),
               ),
-              child: Image.asset(
-                'assets/illustrations/meditation_3d.png',
-                width: 90,
-                height: 90,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) => const Icon(
-                  Icons.self_improvement,
-                  size: 45,
-                  color: Colors.white,
-                ),
+              child: const RiveIllustration(
+                asset: 'assets/rive/breathing_animation.riv',
+                fallbackIcon: Icons.self_improvement,
+                fallbackSize: 45,
               ),
             ),
           ),
@@ -408,14 +399,10 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
             ],
           ),
-          child: Image.asset(
-            'assets/illustrations/blue_shield_3d.png',
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) => const Icon(
-              Icons.lock_person_outlined,
-              size: 50,
-              color: Color(0xFF18181B),
-            ),
+          child: const RiveIllustration(
+            asset: 'assets/rive/secure_folder_animation.riv',
+            fallbackIcon: Icons.lock_person_outlined,
+            fallbackColor: Color(0xFF18181B),
           ),
         ),
       ],

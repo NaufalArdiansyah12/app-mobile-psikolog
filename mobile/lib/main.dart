@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:rive/rive.dart' as rive;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/launch_splash_screen.dart';
@@ -14,6 +15,7 @@ import 'services/storage_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await rive.RiveNative.init();
   final prefs = await SharedPreferences.getInstance();
   final bool seenWalkthrough = prefs.getBool('seen_walkthrough') ?? false;
   final String? savedUuid = prefs.getString('mindpal_user_uuid');
