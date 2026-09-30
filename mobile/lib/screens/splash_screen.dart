@@ -287,10 +287,14 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
             ],
           ),
-          child: const Icon(
-            Icons.chat_bubble_outline_rounded,
-            size: 50,
-            color: Colors.white,
+          child: Image.asset(
+            'assets/illustrations/chat_bubble_3d.png',
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => const Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 50,
+              color: Color(0xFF0A0A0A),
+            ),
           ),
         ),
       ],
@@ -342,7 +346,17 @@ class _SplashScreenState extends State<SplashScreen> {
                   end: Alignment.bottomRight,
                 ),
               ),
-              child: const Icon(Icons.self_improvement, size: 45, color: Colors.white),
+              child: Image.asset(
+                'assets/illustrations/meditation_3d.png',
+                width: 90,
+                height: 90,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.self_improvement,
+                  size: 45,
+                  color: Colors.white,
+                ),
+              ),
             ),
           ),
         ),
@@ -394,7 +408,15 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
             ],
           ),
-          child: const Icon(Icons.lock_person_outlined, size: 50, color: Colors.white),
+          child: Image.asset(
+            'assets/illustrations/blue_shield_3d.png',
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => const Icon(
+              Icons.lock_person_outlined,
+              size: 50,
+              color: Color(0xFF18181B),
+            ),
+          ),
         ),
       ],
     );

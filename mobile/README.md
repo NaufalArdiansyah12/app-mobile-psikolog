@@ -1,6 +1,16 @@
 # mobile
 
-A new Flutter project.
+MindPal Flutter client.
+
+## Image attribution
+
+3D illustrations used in onboarding come from [Thiings](https://www.thiings.co/):
+
+- [Chat Bubble](https://www.thiings.co/things/chat-bubble)
+- [Meditation](https://www.thiings.co/things/meditation)
+- [Blue Shield](https://www.thiings.co/things/blue-shield)
+
+Free downloads are subject to Thiings' personal, non-commercial license and require attribution. Review Thiings' [Terms of Service](https://www.thiings.co/terms) before commercial release.
 
 ## Getting Started
 

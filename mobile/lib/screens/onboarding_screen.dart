@@ -263,18 +263,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ],
           ),
-          child: ClipOval(
-            child: Image.asset(
-              'assets/logo.jpg',
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                color: const Color(0xFF0A0A0A),
-                child: const Icon(
-                  Icons.chat_bubble_outline_rounded,
-                  size: 50,
-                  color: Colors.white,
-                ),
-              ),
+          child: Image.asset(
+            'assets/illustrations/chat_bubble_3d.png',
+            width: 120,
+            height: 120,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => const Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 50,
+              color: Color(0xFF0A0A0A),
             ),
           ),
         ),
@@ -326,7 +323,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   end: Alignment.bottomRight,
                 ),
               ),
-              child: const Icon(Icons.self_improvement, size: 45, color: Colors.white),
+              child: Image.asset(
+                'assets/illustrations/meditation_3d.png',
+                width: 90,
+                height: 90,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.self_improvement,
+                  size: 45,
+                  color: Colors.white,
+                ),
+              ),
             ),
           ),
         ),
@@ -377,7 +384,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ],
           ),
-          child: const Icon(Icons.lock_person_outlined, size: 50, color: Colors.white),
+          child: Image.asset(
+            'assets/illustrations/blue_shield_3d.png',
+            width: 120,
+            height: 120,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => const Icon(
+              Icons.lock_person_outlined,
+              size: 50,
+              color: Colors.white,
+            ),
+          ),
         ),
       ],
     );
