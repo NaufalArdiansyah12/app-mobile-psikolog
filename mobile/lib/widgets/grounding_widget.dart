@@ -46,7 +46,7 @@ class _GroundingExerciseWidgetState extends State<GroundingExerciseWidget> {
       "action": "Rasa di Lidah",
       "desc": "Sadari 1 rasa yang ada di mulutmu (misal: rasa air putih atau sensasi netral).",
       "icon": Icons.restaurant_outlined,
-      "color": const Color(0xFFDB2777),
+      "color": const Color(0xFFD97706),
     },
   ];
 

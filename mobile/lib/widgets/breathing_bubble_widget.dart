@@ -131,15 +131,10 @@ class _BreathingBubbleWidgetState extends State<BreathingBubbleWidget>
                 height: 160,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      _color.value ?? Colors.teal.shade300,
-                      Colors.teal.shade700,
-                    ],
-                  ),
+                  color: _color.value ?? const Color(0xFF0D9488),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.teal.withValues(alpha: 0.25),
+                      color: const Color(0xFF0D9488).withValues(alpha: 0.25),
                       blurRadius: 30,
                       spreadRadius: 8,
                     ),

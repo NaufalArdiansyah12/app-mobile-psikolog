@@ -1,8 +1,13 @@
-from fastapi import APIRouter
+import time
+import uuid
+from typing import Dict, List, Any, Optional
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, status
 from app.core.database import get_supabase
-from app.models.schemas import BookingRequest
+from app.models.schemas import BookingRequest, ChargeRequest, DoctorMessageRequest
+from app.services.midtrans_service import MidtransService
 
-router = APIRouter(prefix="/consultation", tags=["Konsultasi & Booking"])
+router = APIRouter(prefix="/consultation", tags=["Konsultasi, Midtrans & Chat Dokter"])
 
 _default_psychologists = [
     {"id": "psy_1", "name": "dr. Nadia S., Sp.KJ", "role": "Psikiater Klinis", "experience": "8 tahun",
@@ -19,7 +24,100 @@ _default_psychologists = [
      "hospital": "Layanan Telekonseling", "available": "Besok, 10:00", "is_available": True},
 ]
 
-_inmemory_bookings = []
+# In-memory storage untuk tracking pembayaran dan chat dokter
+_inmemory_bookings: List[Dict[str, Any]] = []
+_inmemory_payments: Dict[str, Dict[str, Any]] = {} # order_id -> payment details
+_inmemory_doctor_chats: Dict[str, List[Dict[str, Any]]] = {} # booking_id -> messages
+
+
+def _get_chat_session(sp, booking_id: str, create: bool = False):
+    """Use existing chat tables when consultation_messages migration is not deployed."""
+    title = f"consultation:{booking_id}"
+    try:
+        found = sp.table("chat_sessions").select("id").eq("title", title).limit(1).execute()
+        if found.data:
+            return found.data[0]["id"]
+        if not create:
+            return None
+
+        booking = sp.table("bookings").select("user_id").eq("id", booking_id).limit(1).execute()
+        if not booking.data:
+            return None
+        created = sp.table("chat_sessions").insert({
+            "user_id": booking.data[0]["user_id"],
+            "title": title,
+        }).execute()
+        return created.data[0]["id"] if created.data else None
+    except Exception as e:
+        print(f"Supabase legacy chat session error: {e}")
+        return None
+
+
+def _load_persisted_chat(booking_id: str) -> List[Dict[str, Any]]:
+    """Load shared chat history; memory stays fallback when migration is absent."""
+    sp = get_supabase()
+    if not sp:
+        return []
+    try:
+        res = (
+            sp.table("consultation_messages")
+            .select("id, booking_id, sender_id, sender_name, sender_role, message, created_at")
+            .eq("booking_id", booking_id)
+            .order("created_at")
+            .execute()
+        )
+        if res.data:
+            return list(res.data)
+    except Exception:
+        pass
+
+    # Existing chat_messages table keeps chat shared even before SQL migration.
+    try:
+        session_id = _get_chat_session(sp, booking_id)
+        if not session_id:
+            return []
+        res = (
+            sp.table("chat_messages")
+            .select("id, role, content, created_at")
+            .eq("session_id", session_id)
+            .order("created_at")
+            .execute()
+        )
+        return [{
+            "id": row["id"],
+            "booking_id": booking_id,
+            "sender_id": "doctor_id" if row.get("role") == "assistant" else "user",
+            "sender_name": "Dokter Spesialis" if row.get("role") == "assistant" else "Pasien",
+            "sender_role": "doctor" if row.get("role") == "assistant" else "user",
+            "message": row.get("content", ""),
+            "created_at": row.get("created_at"),
+        } for row in (res.data or [])]
+    except Exception as e:
+        print(f"Supabase consultation chat read failed: {e}")
+        return []
+
+
+def _persist_chat_message(message: Dict[str, Any]) -> None:
+    sp = get_supabase()
+    if not sp:
+        return
+    try:
+        sp.table("consultation_messages").insert(message).execute()
+        return
+    except Exception:
+        pass
+
+    try:
+        session_id = _get_chat_session(sp, message["booking_id"], create=True)
+        if session_id:
+            sp.table("chat_messages").insert({
+                "session_id": session_id,
+                "role": "assistant" if message["sender_role"] == "doctor" else "user",
+                "content": message["message"],
+            }).execute()
+    except Exception as e:
+        print(f"Supabase legacy chat write failed: {e}")
+
 
 def _ensure_user(sp, device_uuid: str) -> str:
     user_res = sp.table("users").select("id").eq("device_uuid", device_uuid).execute()
@@ -35,11 +133,306 @@ def get_psychologists():
         try:
             res = sp.table("psychologists").select("*").eq("is_available", True).execute()
             if res.data:
-                return {"count": len(res.data), "psychologists": res.data}
+                cleaned = []
+                for p in res.data:
+                    doc = dict(p)
+                    raw_cat = doc.get("category", "")
+                    if raw_cat and isinstance(raw_cat, str) and raw_cat.strip().startswith("{"):
+                        try:
+                            import json
+                            meta = json.loads(raw_cat)
+                            if "bio" in meta:
+                                doc["bio"] = meta["bio"]
+                            if "education" in meta:
+                                doc["education"] = meta["education"]
+                            if "str_number" in meta:
+                                doc["str"] = meta["str_number"]
+                            if "days" in meta:
+                                doc["available_days"] = meta["days"]
+                            if "slots" in meta:
+                                doc["available_slots"] = meta["slots"]
+                        except Exception:
+                            pass
+                    cleaned.append(doc)
+                return {"count": len(cleaned), "psychologists": cleaned}
         except Exception as e:
             print(f"Supabase query psychologists failed: {e}")
     return {"count": len(_default_psychologists), "psychologists": _default_psychologists}
 
+# 1. MIDTRANS CHARGE API (Custom Native Flow)
+@router.post("/charge")
+def charge_payment(req: ChargeRequest):
+    """
+    Membuat tagihan transaksi menggunakan Midtrans Core API (VA BCA/BNI/BRI/Mandiri & QRIS).
+    Menghasilkan data VA/QRIS untuk tampilan custom di Flutter.
+    """
+    sp = get_supabase()
+    booking_id = str(uuid.uuid4())
+    order_id = f"MP-{int(time.time())}-{uuid.uuid4().hex[:4].upper()}"
+
+    # Cari info dokter
+    doctor_name = "dr. Spesialis MindPal"
+    for doc in _default_psychologists:
+        if str(doc.get("id")) == str(req.psychologist_id):
+            doctor_name = doc.get("name", doctor_name)
+            break
+
+    # Panggil Midtrans Core API
+    charge_result = MidtransService.create_charge(
+        order_id=order_id,
+        gross_amount=req.gross_amount,
+        payment_type=req.payment_type,
+        bank=req.bank or "bca",
+        customer_name="Pasien MindPal"
+    )
+
+    # Simpan booking ke Supabase (status pending bayar)
+    if sp:
+        try:
+            user_id = _ensure_user(sp, req.user_uuid)
+            # Validasi UUID psychologist
+            psy_id = req.psychologist_id
+            if not (len(psy_id) == 36 and psy_id.count('-') == 4):
+                psy_res = sp.table("psychologists").select("id").limit(1).execute()
+                if psy_res.data:
+                    psy_id = psy_res.data[0]["id"]
+            sp_booking = sp.table("bookings").insert({
+                "id": booking_id,
+                "user_id": user_id,
+                "psychologist_id": psy_id,
+                "schedule_time": req.schedule_time,
+                "status": "pending"
+            }).execute()
+            if sp_booking.data:
+                booking_id = sp_booking.data[0].get("id", booking_id)
+        except Exception as e:
+            print(f"Supabase charge booking insert fallback: {e}")
+
+    # Simpan metadata transaksi
+    payment_record = {
+        "booking_id": booking_id,
+        "order_id": order_id,
+        "user_uuid": req.user_uuid,
+        "psychologist_id": req.psychologist_id,
+        "doctor_name": doctor_name,
+        "schedule_time": req.schedule_time,
+        "payment_type": req.payment_type,
+        "bank": (req.bank or "bca").upper(),
+        "gross_amount": req.gross_amount,
+        "va_number": charge_result.get("va_number", ""),
+        "bill_key": charge_result.get("bill_key", ""),
+        "biller_code": charge_result.get("biller_code", ""),
+        "qr_code_url": charge_result.get("qr_code_url", ""),
+        "status": "pending",
+        "created_at": datetime.utcnow().isoformat()
+    }
+
+    _inmemory_payments[order_id] = payment_record
+    _inmemory_bookings.append({
+        "id": booking_id,
+        "order_id": order_id,
+        "user_uuid": req.user_uuid,
+        "psychologist_id": req.psychologist_id,
+        "schedule_time": req.schedule_time,
+        "status": "pending"
+    })
+
+    return {
+        "status": "success",
+        "booking_id": booking_id,
+        "order_id": order_id,
+        "payment_type": req.payment_type,
+        "bank": (req.bank or "bca").upper(),
+        "va_number": charge_result.get("va_number", ""),
+        "bill_key": charge_result.get("bill_key", ""),
+        "biller_code": charge_result.get("biller_code", ""),
+        "qr_code_url": charge_result.get("qr_code_url", ""),
+        "gross_amount": req.gross_amount,
+        "expiry_time": charge_result.get("expiry_time", ""),
+        "doctor_name": doctor_name,
+        "schedule_time": req.schedule_time,
+        "transaction_status": "pending",
+        "is_live_midtrans": charge_result.get("is_live_midtrans", False)
+    }
+
+# 2. WEBHOOK NOTIFIKASI MIDTRANS
+@router.post("/midtrans-webhook")
+def midtrans_webhook(payload: Dict[str, Any]):
+    """Menerima status pembaruan transaksi dari Midtrans Core API."""
+    order_id = payload.get("order_id", "")
+    transaction_status = payload.get("transaction_status", "")
+    fraud_status = payload.get("fraud_status", "accept")
+
+    is_paid = False
+    if transaction_status in ("capture", "settlement"):
+        if fraud_status == "accept":
+            is_paid = True
+    elif transaction_status in ("deny", "cancel", "expire"):
+        is_paid = False
+
+    if order_id in _inmemory_payments:
+        _inmemory_payments[order_id]["status"] = "confirmed" if is_paid else transaction_status
+        booking_id = _inmemory_payments[order_id].get("booking_id")
+        if booking_id:
+            for b in _inmemory_bookings:
+                if b.get("id") == booking_id:
+                    b["status"] = "confirmed" if is_paid else "pending"
+
+            sp = get_supabase()
+            if sp and is_paid:
+                try:
+                    sp.table("bookings").update({"status": "confirmed"}).eq("id", booking_id).execute()
+                except Exception as e:
+                    print(f"Supabase update booking webhook error: {e}")
+
+    return {"status": "ok", "order_id": order_id, "is_paid": is_paid}
+
+# 3. INSTANT SIMULATOR (Sandbox Testing dari Mobile App)
+@router.post("/simulate-payment/{order_id}")
+def simulate_payment(order_id: str, booking_id: Optional[str] = None):
+    """Simulasi pembayaran lunas instan untuk sandbox test dari ponsel."""
+    # Settle transaksi langsung di Midtrans Sandbox Simulator
+    MidtransService.simulate_payment_settlement(order_id)
+
+    target_booking_id = booking_id
+    if order_id in _inmemory_payments:
+        _inmemory_payments[order_id]["status"] = "confirmed"
+        if not target_booking_id:
+            target_booking_id = _inmemory_payments[order_id].get("booking_id")
+    else:
+        _inmemory_payments[order_id] = {
+            "booking_id": target_booking_id or f"bk_{order_id}",
+            "order_id": order_id,
+            "doctor_name": "dr. Nadia S., Sp.KJ",
+            "schedule_time": "Sesi Konsultasi",
+            "status": "confirmed",
+            "created_at": datetime.utcnow().isoformat()
+        }
+
+    resolved_id = target_booking_id or _inmemory_payments[order_id].get("booking_id", f"bk_{order_id}")
+
+    found = False
+    for b in _inmemory_bookings:
+        if b.get("id") == resolved_id or b.get("order_id") == order_id:
+            b["status"] = "confirmed"
+            found = True
+    if not found:
+        _inmemory_bookings.append({
+            "id": resolved_id,
+            "order_id": order_id,
+            "status": "confirmed"
+        })
+
+    sp = get_supabase()
+    if sp and resolved_id:
+        try:
+            # Jika resolved_id berformat UUID, update status di Supabase
+            if len(resolved_id) == 36 and resolved_id.count('-') == 4:
+                sp.table("bookings").update({"status": "confirmed"}).eq("id", resolved_id).execute()
+        except Exception as e:
+            print(f"Supabase simulate payment update error: {e}")
+
+    # Otomatis inisialisasi ruang chat dokter dengan sapaan hangat
+    if resolved_id not in _inmemory_doctor_chats:
+        doctor_name = _inmemory_payments[order_id].get("doctor_name", "Dokter")
+        schedule = _inmemory_payments[order_id].get("schedule_time", "Sesi Konsultasi")
+        _inmemory_doctor_chats[resolved_id] = [
+            {
+                "id": str(uuid.uuid4()),
+                "booking_id": resolved_id,
+                "sender_id": "doctor_id",
+                "sender_name": doctor_name,
+                "sender_role": "doctor",
+                "message": f"Halo! Pembayaran sesi konsultasi ({schedule}) telah terkonfirmasi. Saya {doctor_name} siap mendengarkan cerita dan keluhan Anda. Silakan ceritakan apa yang saat ini Anda rasakan.",
+                "created_at": datetime.utcnow().isoformat()
+            }
+        ]
+
+    return {
+        "status": "success",
+        "order_id": order_id,
+        "booking_id": resolved_id,
+        "transaction_status": "confirmed",
+        "message": "Pembayaran berhasil diverifikasi (Simulasi Midtrans Sandbox)."
+    }
+
+# 4. CEK STATUS PEMBAYARAN & BOOKING
+@router.get("/booking/{booking_id}/status")
+def check_booking_status(booking_id: str):
+    # Cek Supabase
+    sp = get_supabase()
+    status_str = "pending"
+    if sp:
+        try:
+            res = sp.table("bookings").select("status").eq("id", booking_id).execute()
+            if res.data:
+                status_str = res.data[0].get("status", "pending")
+        except Exception:
+            pass
+
+    if status_str == "pending":
+        for b in _inmemory_bookings:
+            if b.get("id") == booking_id and b.get("status") == "confirmed":
+                status_str = "confirmed"
+                break
+
+    return {
+        "booking_id": booking_id,
+        "status": status_str,
+        "is_paid": status_str in ("confirmed", "completed")
+    }
+
+# 5. CHAT 1-ON-1 PASIEN & DOKTER
+@router.get("/chat/{booking_id}/messages")
+def get_doctor_chat_messages(booking_id: str):
+    """Mengambil pesan obrolan 1-on-1 untuk booking yang sudah lunas."""
+    persisted = _load_persisted_chat(booking_id)
+    if persisted:
+        _inmemory_doctor_chats[booking_id] = persisted
+    elif booking_id not in _inmemory_doctor_chats:
+        _inmemory_doctor_chats[booking_id] = [
+            {
+                "id": f"welcome_{booking_id}",
+                "booking_id": booking_id,
+                "sender_id": "doctor_id",
+                "sender_name": "dr. Nadia S., Sp.KJ",
+                "sender_role": "doctor",
+                "message": "Halo! Selamat datang di sesi konsultasi privat MindPal. Saya dr. Nadia. Bagaimana kabar Anda hari ini? Ceritakan apa yang sedang Anda rasakan.",
+                "created_at": datetime.utcnow().isoformat()
+            }
+        ]
+    messages = _inmemory_doctor_chats[booking_id]
+    return {
+        "booking_id": booking_id,
+        "count": len(messages),
+        "messages": messages
+    }
+
+@router.post("/chat/{booking_id}/send")
+def send_doctor_message(booking_id: str, req: DoctorMessageRequest):
+    """Kirim pesan dalam ruang chat 1-on-1 dengan dokter."""
+    if booking_id not in _inmemory_doctor_chats:
+        _inmemory_doctor_chats[booking_id] = []
+
+    user_msg_id = str(uuid.uuid4())
+    user_msg = {
+        "id": user_msg_id,
+        "booking_id": booking_id,
+        "sender_id": req.sender_id,
+        "sender_name": req.sender_name,
+        "sender_role": req.sender_role,
+        "message": req.message,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    _inmemory_doctor_chats[booking_id].append(user_msg)
+    _persist_chat_message(user_msg)
+
+    return {
+        "status": "success",
+        "message": user_msg
+    }
+
+# 6. Backward Compatibility Booking API
 @router.post("/bookings")
 def create_booking(booking: BookingRequest):
     sp = get_supabase()
@@ -74,3 +467,89 @@ def get_user_bookings(user_uuid: str):
 
     user_bookings = [b for b in _inmemory_bookings if b.get("user_uuid") == user_uuid]
     return {"user_uuid": user_uuid, "count": len(user_bookings), "bookings": user_bookings}
+
+# 7. JADWAL TERISI (BOOKED SLOTS) DOKTER
+@router.get("/psychologist/{psychologist_id}/booked-schedules")
+def get_booked_schedules(psychologist_id: str):
+    """Mengambil daftar jadwal yang sudah terisi dan terkonfirmasi untuk dokter."""
+    sp = get_supabase()
+    schedules = []
+
+    # 1. Supabase
+    if sp:
+        try:
+            psy_id = psychologist_id
+            if psy_id in ("psy_1", "ce2677f2-6831-4769-adb2-b29f27359aa9"):
+                res = sp.table("bookings").select("schedule_time").eq("status", "confirmed").execute()
+            else:
+                res = sp.table("bookings").select("schedule_time").eq("psychologist_id", psy_id).eq("status", "confirmed").execute()
+            if res.data:
+                for r in res.data:
+                    sched = r.get("schedule_time")
+                    if sched and sched not in schedules:
+                        schedules.append(sched)
+        except Exception as e:
+            print(f"Supabase booked schedules query error: {e}")
+
+    # 2. In-memory
+    for b in _inmemory_bookings:
+        if b.get("status") == "confirmed":
+            sched = b.get("schedule_time")
+            if sched and sched not in schedules:
+                schedules.append(sched)
+
+    return {"psychologist_id": psychologist_id, "count": len(schedules), "schedules": schedules}
+
+# 8. SESI KONSULTASI AKTIF USER (UNTUK AKSES CHAT 1-ON-1)
+@router.get("/user/{user_uuid}/active-sessions")
+def get_user_active_sessions(user_uuid: str):
+    """Mengambil daftar sesi konsultasi aktif yang sudah dibayar oleh pasien."""
+    sp = get_supabase()
+    active_sessions = []
+
+    if sp:
+        try:
+            user_id = user_uuid
+            u_res = sp.table("users").select("id").eq("device_uuid", user_uuid).execute()
+            if u_res.data:
+                user_id = u_res.data[0]["id"]
+
+            res = sp.table("bookings").select("id, schedule_time, status, created_at, psychologists(id, name, role, hospital, price)").eq("user_id", user_id).eq("status", "confirmed").order("created_at", desc=True).execute()
+            if res.data:
+                for b in res.data:
+                    doc = b.get("psychologists") or {}
+                    active_sessions.append({
+                        "booking_id": b.get("id"),
+                        "schedule_time": b.get("schedule_time"),
+                        "status": b.get("status"),
+                        "created_at": b.get("created_at"),
+                        "doctor": {
+                            "id": doc.get("id", "psy_1"),
+                            "name": doc.get("name", "dr. Nadia S., Sp.KJ"),
+                            "role": doc.get("role", "Psikiater Klinis"),
+                            "hospital": doc.get("hospital", "MindPal Telekonseling"),
+                            "price": doc.get("price", "Rp 250.000")
+                        }
+                    })
+        except Exception as e:
+            print(f"Supabase user active sessions query error: {e}")
+
+    # Fallback in-memory
+    if not active_sessions:
+        for b in _inmemory_bookings:
+            if b.get("status") == "confirmed":
+                active_sessions.append({
+                    "booking_id": b.get("id"),
+                    "schedule_time": b.get("schedule_time"),
+                    "status": "confirmed",
+                    "created_at": datetime.utcnow().isoformat(),
+                    "doctor": {
+                        "id": b.get("psychologist_id", "psy_1"),
+                        "name": "dr. Nadia S., Sp.KJ",
+                        "role": "Psikiater Klinis",
+                        "hospital": "RS Mitra Sehat Jakarta",
+                        "price": "Rp 250.000"
+                    }
+                })
+
+    return {"user_uuid": user_uuid, "count": len(active_sessions), "sessions": active_sessions}

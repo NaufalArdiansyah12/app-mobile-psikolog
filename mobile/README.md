@@ -2,15 +2,15 @@
 
 MindPal Flutter client.
 
-## Rive asset attribution
+## Image attribution
 
-Animated onboarding illustrations use Rive Community assets under CC BY 4.0:
+3D illustrations used in onboarding come from [Thiings](https://www.thiings.co/):
 
-- [Chat App Animation](https://rive.app/community/files/4176-8684-chat-app-animation/) by sashailic101-rive
-- [Breathing animation](https://rive.app/community/files/12653-23995-breathing-animation/) by p44v9n
-- [Secure Folder Barking Dog](https://rive.app/community/files/6360-12336-secure-folder-barking-dog/) by mailtosivamu
+- [Chat Bubble](https://www.thiings.co/things/chat-bubble)
+- [Meditation](https://www.thiings.co/things/meditation)
+- [Blue Shield](https://www.thiings.co/things/blue-shield)
 
-See [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) for attribution and reuse terms.
+Free downloads are subject to Thiings' personal, non-commercial license and require attribution. Review Thiings' [Terms of Service](https://www.thiings.co/terms) before commercial release.
 
 ## Getting Started
 

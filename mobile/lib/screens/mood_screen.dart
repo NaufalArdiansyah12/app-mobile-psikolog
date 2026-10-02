@@ -1,243 +1,412 @@
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/models.dart';
 import '../services/storage_service.dart';
-import '../services/api_service.dart';
+import '../theme/app_theme.dart';
+import 'chat_session_detail_screen.dart';
 
 class MoodScreen extends StatefulWidget {
   const MoodScreen({super.key});
 
   @override
-  State<MoodScreen> createState() => _MoodScreenState();
+  State<MoodScreen> createState() => MoodScreenState();
 }
 
-class _MoodScreenState extends State<MoodScreen> {
+class MoodScreenState extends State<MoodScreen> {
   final StorageService _storage = StorageService();
-  final ApiService _apiService = ApiService();
-  int _selectedScore = 3;
-  final List<String> _selectedTriggers = [];
-  final TextEditingController _notesController = TextEditingController();
-  List<MoodEntry> _history = [];
-
-  final List<Map<String, dynamic>> _moodLevels = [
-    {'score': 1, 'emoji': '😢', 'label': 'Sangat Buruk'},
-    {'score': 2, 'emoji': '😟', 'label': 'Buruk'},
-    {'score': 3, 'emoji': '😐', 'label': 'Netral'},
-    {'score': 4, 'emoji': '🙂', 'label': 'Baik'},
-    {'score': 5, 'emoji': '😄', 'label': 'Sangat Baik'},
-  ];
-
-  final List<String> _triggerOptions = [
-    'Pekerjaan',
-    'Perkuliahan',
-    'Finansial',
-    'Asmara',
-    'Keluarga',
-    'Kesehatan',
-    'Kurang Tidur',
-    'Cuaca',
-  ];
+  List<ChatSession> _chatSessions = [];
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadMoods();
+    loadData();
   }
 
-  void _loadMoods() async {
-    final list = await _storage.getMoods();
-    setState(() {
-      _history = list.reversed.toList();
-    });
+  void loadData() async {
+    setState(() => _isLoading = true);
+    final sessions = await _storage.getChatSessions();
+    if (mounted) {
+      setState(() {
+        _chatSessions = sessions.reversed.toList();
+        _isLoading = false;
+      });
+    }
   }
 
-  void _saveCurrentMood() async {
-    final activeMood = _moodLevels.firstWhere((m) => m['score'] == _selectedScore);
-    final entry = MoodEntry(
-      id: const Uuid().v4(),
-      score: _selectedScore,
-      label: activeMood['label'],
-      triggers: List.from(_selectedTriggers),
-      notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
-    );
-
-    await _storage.saveMood(entry);
-    final uuid = await _storage.getOrCreateUserUuid();
-    _apiService.syncMood(entry, uuid); // Sync async ke Supabase backend
-
-    _notesController.clear();
-    setState(() => _selectedTriggers.clear());
-    _loadMoods();
-
+  void _deleteSession(String id) async {
+    await _storage.deleteChatSession(id);
+    loadData();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Catatan mood berhasil disimpan!")),
+        SnackBar(
+          content: Text(
+            "Sesi obrolan berhasil dihapus.",
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF0F172A),
+        ),
       );
     }
   }
 
+  Color _getDistressColor(int score) {
+    if (score <= 3) return const Color(0xFF10B981);
+    if (score <= 6) return const Color(0xFFF59E0B);
+    return const Color(0xFFEF4444);
+  }
+
   @override
   Widget build(BuildContext context) {
+    const Color primaryTeal = Color(0xFF006D77);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Jurnal Emosi & Mood", style: TextStyle(fontWeight: FontWeight.bold)),
-        elevation: 0,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16.0),
-        children: [
-          // Card Input Mood
-          Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            elevation: 0,
-            color: Colors.white,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: primaryTeal,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            // 1. TOP HEADER (Hijau Aqua / Deep Teal)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    "Bagaimana perasaanmu sekarang?",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: _moodLevels.map((m) {
-                      final isSelected = _selectedScore == m['score'];
-                      return GestureDetector(
-                        onTap: () => setState(() => _selectedScore = m['score']),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.teal.shade50 : Colors.transparent,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isSelected ? Colors.teal : Colors.transparent,
-                              width: 2,
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              Text(m['emoji'], style: const TextStyle(fontSize: 28)),
-                              const SizedBox(height: 4),
-                              Text(
-                                m['label'],
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                  color: isSelected ? Colors.teal : Colors.grey.shade700,
-                                ),
-                              ),
-                            ],
-                          ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Jurnal Sesi & Evaluasi AI",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 21,
+                          color: Colors.white,
+                          letterSpacing: -0.4,
                         ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text("Faktor Pemicu (Trigger):", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: _triggerOptions.map((tag) {
-                      final isSelected = _selectedTriggers.contains(tag);
-                      return FilterChip(
-                        label: Text(tag, style: const TextStyle(fontSize: 12)),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          setState(() {
-                            if (selected) {
-                              _selectedTriggers.add(tag);
-                            } else {
-                              _selectedTriggers.remove(tag);
-                            }
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _notesController,
-                    maxLines: 2,
-                    decoration: InputDecoration(
-                      hintText: "Catatan singkat (opsional)...",
-                      hintStyle: const TextStyle(fontSize: 12),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      contentPadding: const EdgeInsets.all(10),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      onPressed: _saveCurrentMood,
-                      child: const Text("Simpan Mood"),
-                    ),
+                      const SizedBox(height: 3),
+                      Text(
+                        "Riwayat refleksi & meteran keparahan emosi",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withValues(alpha: 0.85),
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 22),
+                    tooltip: "Muat Ulang",
+                    onPressed: loadData,
                   ),
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            "Riwayat Catatan",
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-          const SizedBox(height: 10),
-          if (_history.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20.0),
-              child: Center(
-                child: Text("Belum ada catatan mood.", style: TextStyle(color: Colors.grey)),
-              ),
-            )
-          else
-            ..._history.map((m) {
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 0,
-                color: Colors.white,
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.teal.shade50,
-                    child: Text(
-                      _moodLevels.firstWhere((lvl) => lvl['score'] == m.score)['emoji'],
-                      style: const TextStyle(fontSize: 20),
+
+            // 2. BOTTOM HALF CURVED CARD
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF8FAF9),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(34)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x22000000),
+                      blurRadius: 20,
+                      offset: Offset(0, -6),
                     ),
+                  ],
+                ),
+                child: _buildContent(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFF0D9488)));
+    }
+
+    if (_chatSessions.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: () async => loadData(),
+        color: const Color(0xFF0D9488),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(32.0),
+          children: [
+            const SizedBox(height: 80),
+            Center(
+              child: Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCCFBF1).withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.auto_stories_outlined,
+                  size: 38,
+                  color: Color(0xFF0D9488),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              "Belum Ada Sesi Tersimpan",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Setiap kali kamu curhat dengan MindPal AI, tekan ikon bookmark atau selesaikan sesi untuk mengarsipkan obrolan dan melihat statistik keparahan emosimu di sini.",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                color: const Color(0xFF64748B),
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () async => loadData(),
+      color: const Color(0xFF0D9488),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 100),
+        children: [
+          // Banner Ringkasan Sesi
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0D9488),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0D9488).withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  title: Text(m.label, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Column(
+                  child: const Icon(Icons.analytics_rounded, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (m.triggers.isNotEmpty)
-                        Text(
-                          "Pemicu: ${m.triggers.join(', ')}",
-                          style: const TextStyle(fontSize: 12, color: Colors.black54),
+                      Text(
+                        "${_chatSessions.length} Riwayat Sesi Teranalisis",
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14.5,
                         ),
-                      if (m.notes != null)
-                        Text(
-                          m.notes!,
-                          style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "Klik kartu sesi di bawah untuk melihat meteran keparahan & refleksi CBT",
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white.withValues(alpha: 0.88),
+                          fontSize: 11,
                         ),
+                      ),
                     ],
                   ),
-                  trailing: Text(
-                    "${m.timestamp.day}/${m.timestamp.month} ${m.timestamp.hour.toString().padLeft(2, '0')}:${m.timestamp.minute.toString().padLeft(2, '0')}",
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          // Daftar Kartu Sesi
+          ..._chatSessions.map((session) {
+            final analysis = session.analysis;
+            final distressScore = analysis?.distressScore ?? 4;
+            final distressColor = _getDistressColor(distressScore);
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ChatSessionDetailScreen(
+                        session: session,
+                        onDelete: () => _deleteSession(session.id),
+                      ),
+                    ),
+                  ).then((_) => loadData());
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF0F172A).withValues(alpha: 0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Top Row: Tanggal & Badge Keparahan
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.calendar_today_rounded, size: 12, color: Color(0xFF94A3B8)),
+                              const SizedBox(width: 5),
+                              Text(
+                                "${session.createdAt.day}/${session.createdAt.month}/${session.createdAt.year}  ${session.createdAt.hour.toString().padLeft(2, '0')}:${session.createdAt.minute.toString().padLeft(2, '0')}",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF94A3B8),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                            decoration: BoxDecoration(
+                              color: distressColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: distressColor.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: distressColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  "Distress $distressScore/10 (${analysis?.distressLevel ?? 'Sedang'})",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: distressColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      // Judul Sesi / Preview Pesan Pertama
+                      Text(
+                        session.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF0F172A),
+                          height: 1.35,
+                        ),
+                      ),
+
+                      // Tags Emosi
+                      if (analysis != null && analysis.dominantEmotions.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: analysis.dominantEmotions.take(3).map((emo) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                "#$emo",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF475569),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "${session.messages.length} pesan",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              color: const Color(0xFF94A3B8),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              Text(
+                                "Lihat Statistik",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF0D9488),
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+                              const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: Color(0xFF0D9488)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              );
-            }),
+              ),
+            );
+          }),
         ],
       ),
     );

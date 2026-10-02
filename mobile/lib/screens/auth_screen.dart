@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../services/storage_service.dart';
+import '../services/api_service.dart';
 import '../main.dart';
+import '../widgets/app_logo.dart';
+import 'doctor/doctor_main_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -11,359 +15,197 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   final StorageService _storage = StorageService();
+  final ApiService _api = ApiService();
 
-  bool _isLoginTab = true; // true: Masuk, false: Daftar
+  bool _isLogin = true; // true = Login, false = Sign Up
+  String _selectedRole = 'user'; // 'user' or 'doctor'
   bool _obscurePassword = true;
+  bool _agreeTerms = true;
+  bool _isLoading = false;
 
-  final TextEditingController _nicknameController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  static const Color primaryTeal = Color(0xFF0D9488);
+  static const Color fieldBorderColor = Color(0xFFE2E8F0);
+
   @override
   void dispose() {
-    _nicknameController.dispose();
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  // Alur 1: Masuk Anonim (Zero-KYC sesuai PRD)
-  void _startGuestSession() async {
-    final alias = _nicknameController.text.trim().isNotEmpty
-        ? _nicknameController.text.trim()
-        : "Sobat MindPal";
+  Future<void> _submitAuth() async {
+    if (_isLoading) return;
 
-    await _storage.setNickname(alias);
-    await _storage.getOrCreateUserUuid();
-
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-    );
-  }
-
-  // Alur 2: Email & Password Auth
-  void _submitEmailAuth() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
+    final name = _nameController.text.trim();
 
-    if (email.isEmpty || !email.contains('@')) {
+    if (!_isLogin && name.isEmpty) {
+      _showToast("Nama tidak boleh kosong");
+      return;
+    }
+
+    if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
       _showToast("Format email tidak valid");
       return;
     }
+
     if (password.length < 6) {
-      _showToast("Password minimal 6 karakter");
+      _showToast("Kata sandi minimal 6 karakter");
       return;
     }
 
-    // Set nickname dari email username
-    final defaultNickname = email.split('@').first;
-    await _storage.setNickname(defaultNickname);
-    await _storage.getOrCreateUserUuid();
+    if (!_isLogin && !_agreeTerms) {
+      _showToast("Harap setujui Syarat dan Ketentuan");
+      return;
+    }
 
-    if (!mounted) return;
-    _showToast(_isLoginTab ? "Berhasil Masuk!" : "Pendaftaran Berhasil!");
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-    );
+    setState(() => _isLoading = true);
+
+    try {
+      if (_isLogin) {
+        final res = await _api.login(email: email, password: password);
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+
+        if (res.success && res.userId != null) {
+          final effectiveRole = res.role.isNotEmpty ? res.role : 'user';
+          await _storage.saveUserSession(
+            userId: res.userId!,
+            email: res.email ?? email,
+            nickname: res.nickname ?? email.split('@').first,
+            role: effectiveRole,
+            doctorId: res.psychologistId,
+            token: res.token,
+          );
+          if (!mounted) return;
+          _showSuccessDialog(effectiveRole);
+        } else {
+          _showToast(res.errorMessage ?? "Gagal masuk. Periksa kembali email dan sandi.");
+        }
+      } else {
+        final res = await _api.register(
+          email: email,
+          password: password,
+          name: name,
+          role: _selectedRole,
+        );
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+
+        if (res.success && res.userId != null) {
+          final effectiveRole = res.role.isNotEmpty ? res.role : _selectedRole;
+          await _storage.saveUserSession(
+            userId: res.userId!,
+            email: res.email ?? email,
+            nickname: res.nickname ?? name,
+            role: effectiveRole,
+            doctorId: res.psychologistId,
+            token: res.token,
+          );
+          if (!mounted) return;
+          _showSuccessDialog(effectiveRole);
+        } else {
+          _showToast(res.errorMessage ?? "Gagal mendaftar. Silakan coba lagi.");
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _showToast("Terjadi kendala jaringan: $e");
+    }
   }
 
-  void _showToast(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: const Color(0xFF09090B),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 20),
+  void _showSuccessDialog(String role) {
+    final bool isDoctor = role == 'doctor';
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 32, 24, 28),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: 12),
-              // Brand Logo Badge
-              Center(
-                child: Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(22),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(22),
-                    child: Image.asset(
-                      'assets/logo.jpg',
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: const Color(0xFF0A0A0A),
-                        child: const Icon(Icons.auto_awesome, color: Colors.white, size: 32),
-                      ),
-                    ),
+              Container(
+                width: 72,
+                height: 72,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFFCCFBF1),
+                ),
+                child: Center(
+                  child: Icon(
+                    isDoctor ? Icons.medical_services_rounded : Icons.check_rounded,
+                    color: primaryTeal,
+                    size: 38,
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-              // Header Title
-              const Text(
-                "MindPal",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 26,
+              const SizedBox(height: 22),
+              Text(
+                isDoctor
+                    ? "Selamat Datang, Dokter!"
+                    : (_isLogin ? "Selamat Datang Kembali!" : "Akun Berhasil Dibuat!"),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 19,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF09090B),
-                  letterSpacing: -0.5,
+                  color: const Color(0xFF0F172A),
                 ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                "Ruang aman untuk bercerita dan pulih tanpa stigma.",
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  color: Color(0xFF71717A),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isDoctor
+                    ? "Portal tenaga ahli siap digunakan untuk mengelola antrean dan sesi konsultasi pasien."
+                    : (_isLogin
+                        ? "Berhasil masuk ke MindPal. Data obrolan dan jurnalmu siap digunakan."
+                        : "Akunmu berhasil didaftarkan dan tersimpan aman di database."),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12.5,
+                  color: const Color(0xFF64748B),
                   height: 1.4,
                 ),
+                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 32),
-
-              // Segmented Pill Tab: Masuk / Daftar
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE4E4E7),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _isLoginTab = true),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: _isLoginTab ? Colors.white : Colors.transparent,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: _isLoginTab
-                                ? [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.05),
-                                      blurRadius: 4,
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                          child: Text(
-                            "Masuk",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: _isLoginTab ? const Color(0xFF09090B) : const Color(0xFF71717A),
-                            ),
-                          ),
-                        ),
-                      ),
+              const SizedBox(height: 26),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryTeal,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
                     ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _isLoginTab = false),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: !_isLoginTab ? Colors.white : Colors.transparent,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: !_isLoginTab
-                                ? [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.05),
-                                      blurRadius: 4,
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                          child: Text(
-                            "Daftar Akun",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: !_isLoginTab ? const Color(0xFF09090B) : const Color(0xFF71717A),
-                            ),
-                          ),
-                        ),
-                      ),
+                  ),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    final Widget targetScreen = isDoctor
+                        ? const DoctorMainScreen()
+                        : const MainNavigationScreen();
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => targetScreen),
+                    );
+                  },
+                  child: Text(
+                    isDoctor ? "Masuk ke Dashboard Dokter" : "Mulai Sekarang",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Email Input
-              _buildInputLabel("EMAIL"),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: _inputDecoration(
-                  hintText: "nama@email.com",
-                  prefixIcon: Icons.mail_outline_rounded,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Password Input
-              _buildInputLabel("KATA SANDI"),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                decoration: _inputDecoration(
-                  hintText: "Minimal 6 karakter",
-                  prefixIcon: Icons.lock_outline_rounded,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                      color: const Color(0xFF71717A),
-                      size: 20,
-                    ),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-
-              // Tombol Submit Utama
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0A0A0A),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-                  elevation: 2,
-                ),
-                onPressed: _submitEmailAuth,
-                child: Text(
-                  _isLoginTab ? "MASUK KE MINDPAL" : "BUAT AKUN BARU",
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.1,
-                  ),
-                ),
-              ),
-
-              // Divider "ATAU"
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24.0),
-                child: Row(
-                  children: [
-                    const Expanded(child: Divider(color: Color(0xFFE4E4E7))),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text(
-                        "ATAU MASUK ANONIM",
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey.shade500,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ),
-                    const Expanded(child: Divider(color: Color(0xFFE4E4E7))),
-                  ],
-                ),
-              ),
-
-              // Zero-KYC Mode Card (Sesuai PRD)
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFE4E4E7)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.shield_outlined, color: Color(0xFF0D9488), size: 20),
-                        SizedBox(width: 8),
-                        Text(
-                          "Mode Privasi Penuh (Zero-KYC)",
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      "Mulai curhat tanpa email atau nomor HP. Cukup masukkan nama panggilan samaran:",
-                      style: TextStyle(fontSize: 12, color: Color(0xFF71717A), height: 1.4),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _nicknameController,
-                      decoration: InputDecoration(
-                        hintText: "Contoh: Bintang, Rian, Kawan (opsional)",
-                        hintStyle: const TextStyle(fontSize: 12.5, color: Color(0xFFA1A1AA)),
-                        filled: true,
-                        fillColor: const Color(0xFFF4F4F5),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF09090B),
-                          side: const BorderSide(color: Color(0xFF27272A), width: 1.2),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                        onPressed: _startGuestSession,
-                        icon: const Icon(Icons.person_pin_circle_outlined, size: 18),
-                        label: const Text(
-                          "Mulai Sebagai Tamu Anonim",
-                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -371,38 +213,476 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _buildInputLabel(String label) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w800,
-        color: Color(0xFF52525B),
-        letterSpacing: 0.8,
+  void _showToast(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: GoogleFonts.plusJakartaSans()),
+        backgroundColor: const Color(0xFF0F172A),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
 
-  InputDecoration _inputDecoration({
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: !_isLogin
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+                onPressed: () => setState(() => _isLogin = true),
+              )
+            : null,
+        centerTitle: true,
+        title: Text(
+          _isLogin ? "Masuk ke Akun" : "Daftar Akun Baru",
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: const Color(0xFF0F172A),
+          ),
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header Brand Badge
+              Center(
+                child: Column(
+                  children: [
+                    const AppLogo(
+                      size: 72,
+                      iconSize: 36,
+                      borderRadius: 22,
+                      backgroundColor: primaryTeal,
+                      iconColor: Colors.white,
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      "MindPal",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _isLogin
+                          ? "Masuk untuk melanjutkan perjalanan kesehatan mentalmu"
+                          : "Buat akun pribadi untuk menyimpan jurnal & riwayat sesi",
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12.5,
+                        color: const Color(0xFF64748B),
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Role Selector Toggle hanya untuk Pendaftaran Akun Baru
+              if (!_isLogin) ...[
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedRole = 'user';
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _selectedRole == 'user' ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: _selectedRole == 'user'
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.06),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      )
+                                    ]
+                                  : null,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.person_outline,
+                                  size: 18,
+                                  color: _selectedRole == 'user' ? primaryTeal : const Color(0xFF64748B),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "Pasien",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 13,
+                                    fontWeight: _selectedRole == 'user' ? FontWeight.bold : FontWeight.w600,
+                                    color: _selectedRole == 'user' ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedRole = 'doctor';
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _selectedRole == 'doctor' ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: _selectedRole == 'doctor'
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.06),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      )
+                                    ]
+                                  : null,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.medical_services_outlined,
+                                  size: 18,
+                                  color: _selectedRole == 'doctor' ? primaryTeal : const Color(0xFF64748B),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "Dokter / Ahli",
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 13,
+                                    fontWeight: _selectedRole == 'doctor' ? FontWeight.bold : FontWeight.w600,
+                                    color: _selectedRole == 'doctor' ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+              ] else ...[
+                // Banner Pintasan Akun Demo Dokter untuk Pengujian
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDFA),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFF99F6E4)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.shield_outlined, color: primaryTeal, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Uji Akun Dokter: dokter@mindpal.id",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            color: const Color(0xFF0F766E),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: const Size(0, 0),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _emailController.text = "dokter@mindpal.id";
+                            _passwordController.text = "password123";
+                          });
+                        },
+                        child: Text(
+                          "Gunakan",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: primaryTeal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+              ],
+
+              // Field Nama (Khusus Sign Up)
+              if (!_isLogin) ...[
+                _buildFieldLabel("NAMA LENGKAP"),
+                const SizedBox(height: 6),
+                _buildInputField(
+                  controller: _nameController,
+                  hintText: "Masukkan nama kamu",
+                  prefixIcon: Icons.person_outline_rounded,
+                ),
+                const SizedBox(height: 18),
+              ],
+
+              // Field Email
+              _buildFieldLabel("ALAMAT EMAIL"),
+              const SizedBox(height: 6),
+              _buildInputField(
+                controller: _emailController,
+                hintText: "nama@email.com",
+                prefixIcon: Icons.mail_outline_rounded,
+                keyboardType: TextInputType.emailAddress,
+                suffix: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _emailController,
+                  builder: (context, val, _) {
+                    if (val.text.contains('@') && val.text.contains('.')) {
+                      return const Icon(Icons.check_rounded, color: primaryTeal, size: 20);
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 18),
+
+              // Field Password
+              _buildFieldLabel("KATA SANDI"),
+              const SizedBox(height: 6),
+              _buildInputField(
+                controller: _passwordController,
+                hintText: "Minimal 6 karakter",
+                prefixIcon: Icons.lock_outline_rounded,
+                obscureText: _obscurePassword,
+                suffix: IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                    color: const Color(0xFF94A3B8),
+                    size: 20,
+                  ),
+                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Forgot Password (Hanya muncul saat Login)
+              if (_isLogin)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      _showToast("Tautan reset sandi dapat dikirimkan ke email terdaftar.");
+                    },
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      "Lupa Kata Sandi?",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: primaryTeal,
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Terms and Conditions Checkbox (Hanya muncul saat Sign Up)
+              if (!_isLogin) ...[
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Checkbox(
+                        value: _agreeTerms,
+                        activeColor: primaryTeal,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+                        onChanged: (val) => setState(() => _agreeTerms = val ?? false),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          text: "Saya menyetujui ",
+                          style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF64748B)),
+                          children: const [
+                            TextSpan(
+                              text: "Syarat & Ketentuan",
+                              style: TextStyle(color: primaryTeal, fontWeight: FontWeight.w700),
+                            ),
+                            TextSpan(text: " serta "),
+                            TextSpan(
+                              text: "Kebijakan Privasi",
+                              style: TextStyle(color: primaryTeal, fontWeight: FontWeight.w700),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+
+              const SizedBox(height: 26),
+
+              // Tombol Utama Login / Sign Up
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryTeal,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(26),
+                    ),
+                  ),
+                  onPressed: _isLoading ? null : _submitAuth,
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Text(
+                          _isLogin ? "MASUK KE MINDPAL" : "BUAT AKUN BARU",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                ),
+              ),
+
+              const SizedBox(height: 22),
+
+              // Switch Login <-> Sign Up
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _isLogin ? "Belum memiliki akun? " : "Sudah memiliki akun? ",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _isLoading
+                        ? null
+                        : () {
+                            setState(() {
+                              _isLogin = !_isLogin;
+                            });
+                          },
+                    child: Text(
+                      _isLogin ? "Daftar Sekarang" : "Masuk",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: primaryTeal,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 30),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldLabel(String label) {
+    return Text(
+      label,
+      style: GoogleFonts.plusJakartaSans(
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        color: const Color(0xFF475569),
+        letterSpacing: 0.6,
+      ),
+    );
+  }
+
+  Widget _buildInputField({
+    required TextEditingController controller,
     required String hintText,
     required IconData prefixIcon,
-    Widget? suffixIcon,
+    TextInputType keyboardType = TextInputType.text,
+    bool obscureText = false,
+    Widget? suffix,
   }) {
-    return InputDecoration(
-      hintText: hintText,
-      hintStyle: const TextStyle(fontSize: 13, color: Color(0xFFA1A1AA)),
-      prefixIcon: Icon(prefixIcon, color: const Color(0xFF71717A), size: 18),
-      suffixIcon: suffixIcon,
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFFE4E4E7)),
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: fieldBorderColor),
       ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFF09090B), width: 1.5),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        obscureText: obscureText,
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 13.5,
+          fontWeight: FontWeight.w600,
+          color: const Color(0xFF0F172A),
+        ),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: GoogleFonts.plusJakartaSans(
+            fontSize: 13,
+            color: const Color(0xFF94A3B8),
+            fontWeight: FontWeight.w500,
+          ),
+          prefixIcon: Icon(prefixIcon, color: const Color(0xFF94A3B8), size: 20),
+          suffixIcon: suffix,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        ),
       ),
     );
   }

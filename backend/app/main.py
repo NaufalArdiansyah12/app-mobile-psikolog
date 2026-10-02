@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import get_supabase
-from app.api.routes import chat, mood, consultation, user
+from app.api.routes import chat, mood, consultation, user, auth, doctor
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -29,9 +29,11 @@ def create_app() -> FastAPI:
         }
 
     # Register Routers
+    app.include_router(auth.router, prefix="/api")
     app.include_router(chat.router, prefix="/api")
     app.include_router(mood.router, prefix="/api")
     app.include_router(consultation.router, prefix="/api")
+    app.include_router(doctor.router, prefix="/api")
     app.include_router(user.router, prefix="/api")
 
     # Backward-compatibility alias routes untuk frontend yang sudah ada

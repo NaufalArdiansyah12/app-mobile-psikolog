@@ -9,6 +9,7 @@ create table if not exists users (
     id uuid primary key default uuid_generate_v4(),
     device_uuid text unique not null,
     nickname text default 'Sobat MindPal',
+    role text default 'user' check (role in ('user', 'doctor')),
     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -44,6 +45,7 @@ create table if not exists mood_logs (
 -- 5. Tabel Psikolog & Booking Konsultasi
 create table if not exists psychologists (
     id uuid primary key default uuid_generate_v4(),
+    user_id uuid references users(id) on delete set null,
     name text not null,
     role text not null,
     experience text not null,
@@ -52,17 +54,44 @@ create table if not exists psychologists (
     category text not null,
     hospital text not null,
     is_available boolean default true,
+    bio text,
+    education text,
+    str_number text,
+    available_days jsonb default '["Senin", "Selasa", "Rabu", "Kamis"]'::jsonb,
+    available_slots jsonb default '["09:00 - 10:00", "13:00 - 14:00", "16:00 - 17:00", "19:00 - 20:00"]'::jsonb,
     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Migrasi kolom baru jika tabel sudah ada sebelumnya:
+alter table psychologists add column if not exists bio text;
+alter table psychologists add column if not exists education text;
+alter table psychologists add column if not exists str_number text;
+alter table psychologists add column if not exists available_days jsonb default '["Senin", "Selasa", "Rabu", "Kamis"]'::jsonb;
+alter table psychologists add column if not exists available_slots jsonb default '["09:00 - 10:00", "13:00 - 14:00", "16:00 - 17:00", "19:00 - 20:00"]'::jsonb;
 
 create table if not exists bookings (
     id uuid primary key default uuid_generate_v4(),
     user_id uuid references users(id) on delete cascade not null,
     psychologist_id uuid references psychologists(id) on delete cascade not null,
     schedule_time text not null,
+    notes text,
     status text default 'pending' check (status in ('pending', 'confirmed', 'completed', 'cancelled')),
     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Chat konsultasi dokter-pasien, terikat ke booking
+create table if not exists consultation_messages (
+    id uuid primary key default uuid_generate_v4(),
+    booking_id uuid references bookings(id) on delete cascade not null,
+    sender_id text not null,
+    sender_name text not null,
+    sender_role text not null check (sender_role in ('user', 'doctor')),
+    message text not null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_consultation_messages_booking_created
+    on consultation_messages(booking_id, created_at);
 
 -- Index performa pencarian
 create index if not exists idx_chat_messages_session on chat_messages(session_id);

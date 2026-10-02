@@ -6,12 +6,12 @@
 
 #include "generated_plugin_registrant.h"
 
-#include <rive_native/rive_native_plugin.h>
+#include <file_selector_windows/file_selector_windows.h>
 #include <url_launcher_windows/url_launcher_windows.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
-  RiveNativePluginRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("RiveNativePlugin"));
+  FileSelectorWindowsRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("FileSelectorWindows"));
   UrlLauncherWindowsRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("UrlLauncherWindows"));
 }

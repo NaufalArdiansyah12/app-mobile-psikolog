@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../main.dart';
+import '../widgets/app_logo.dart';
+import '../services/storage_service.dart';
+import 'doctor/doctor_main_screen.dart';
 
 class LaunchSplashScreen extends StatefulWidget {
   const LaunchSplashScreen({super.key});
@@ -13,7 +17,7 @@ class _LaunchSplashScreenState extends State<LaunchSplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _scaleAnimation;
-  late final Animation<double> _fadeAnimation;
+  late final Animation<double> _glowAnimation;
   Timer? _timer;
 
   @override
@@ -22,29 +26,35 @@ class _LaunchSplashScreenState extends State<LaunchSplashScreen>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
 
     _scaleAnimation = Tween<double>(begin: 0.95, end: 1.05).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
 
-    _fadeAnimation = Tween<double>(begin: 0.7, end: 1.0).animate(
+    _glowAnimation = Tween<double>(begin: 0.35, end: 0.75).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
 
-    _timer = Timer(const Duration(milliseconds: 1500), _navigateToHome);
+    _timer = Timer(const Duration(milliseconds: 1600), _navigateToHome);
   }
 
-  void _navigateToHome() {
+  void _navigateToHome() async {
     if (!mounted) return;
+    final role = await StorageService().getUserRole();
+    if (!mounted) return;
+
+    final Widget targetScreen =
+        role == 'doctor' ? const DoctorMainScreen() : const MainNavigationScreen();
+
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, anim1, anim2) => const MainNavigationScreen(),
+        pageBuilder: (context, anim1, anim2) => targetScreen,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
-        transitionDuration: const Duration(milliseconds: 350),
+        transitionDuration: const Duration(milliseconds: 400),
       ),
     );
   }
@@ -59,110 +69,77 @@ class _LaunchSplashScreenState extends State<LaunchSplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
+      backgroundColor: const Color(0xFFF6FAF8),
       body: Stack(
         alignment: Alignment.center,
         children: [
-          // Ambient Warm Spotlight Glow (sama seperti referensi HTML)
-          Positioned(
-            child: Container(
-              width: 320,
-              height: 320,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    const Color(0xFFEFECE6).withValues(alpha: 0.9),
-                    const Color(0xFFF7F4EE).withValues(alpha: 0.4),
-                    Colors.transparent,
+          // Animated Aqua Glow Backdrop
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return Container(
+                width: 280,
+                height: 280,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF0D9488).withValues(alpha: _glowAnimation.value * 0.25),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0D9488).withValues(alpha: _glowAnimation.value * 0.3),
+                      blurRadius: 70,
+                      spreadRadius: 20,
+                    ),
                   ],
                 ),
-              ),
-            ),
+              );
+            },
           ),
 
-          // Central Logo Badge with Breathing Pulse
+          // Central Logo Badge & Brand Name
           Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 ScaleTransition(
                   scale: _scaleAnimation,
-                  child: FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: Container(
-                      width: 96,
-                      height: 96,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(28),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.15),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(28),
-                        child: Image.asset(
-                          'assets/logo.jpg',
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => const Icon(
-                            Icons.auto_awesome,
-                            color: Color(0xFF0A0A0A),
-                            size: 42,
-                          ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF0D9488).withValues(alpha: 0.25),
+                          blurRadius: 30,
+                          offset: const Offset(0, 10),
                         ),
-                      ),
+                      ],
+                    ),
+                    child: const AppLogo(
+                      size: 96,
+                      iconSize: 52,
+                      borderRadius: 28,
+                      backgroundColor: Color(0xFF0D9488),
+                      iconColor: Colors.white,
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                const Text(
+                const SizedBox(height: 26),
+                Text(
                   "MindPal",
-                  style: TextStyle(
-                    fontSize: 28,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 30,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF09090B),
+                    color: const Color(0xFF0F172A),
                     letterSpacing: -0.8,
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  "Ruang aman untuk bercerita",
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    color: Color(0xFF71717A),
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Discrete Bottom Status Pill
-          const Positioned(
-            bottom: 36,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0A0A0A)),
-                  ),
-                ),
-                SizedBox(width: 8),
                 Text(
-                  "Memuat ruang aman...",
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: Color(0xFFA1A1AA),
-                    fontWeight: FontWeight.w600,
+                  "Ruang aman untuk bercerita & pulih",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13.5,
+                    color: const Color(0xFF0D9488),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
                   ),
                 ),
               ],

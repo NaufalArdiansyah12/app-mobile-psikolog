@@ -2,9 +2,9 @@ import json
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from app.models.schemas import ChatRequest
+from app.models.schemas import ChatRequest, ChatAnalyzeRequest, ChatAnalysisResult
 from app.services.safety_service import check_crisis
-from app.services.chat_service import stream_cbt_chat
+from app.services.chat_service import stream_cbt_chat, analyze_chat_session
 
 router = APIRouter(prefix="/chat", tags=["Chat AI"])
 
@@ -40,3 +40,8 @@ async def chat_stream(req: ChatRequest):
             "X-Accel-Buffering": "no",
         }
     )
+
+@router.post("/analyze", response_model=ChatAnalysisResult)
+async def analyze_chat(req: ChatAnalyzeRequest):
+    return await analyze_chat_session(req.messages)
+

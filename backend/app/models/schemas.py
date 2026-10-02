@@ -22,3 +22,78 @@ class BookingRequest(BaseModel):
     user_uuid: str
     psychologist_id: str
     schedule_time: str
+
+class ChatAnalyzeRequest(BaseModel):
+    user_uuid: str
+    messages: List[ChatMessage]
+
+class ChatAnalysisResult(BaseModel):
+    distress_score: int = Field(..., ge=1, le=10)
+    distress_level: str
+    dominant_emotions: List[str] = []
+    cognitive_distortions: List[str] = []
+    summary: str
+    cbt_insights: str
+    action_recommendations: List[str] = []
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str
+    role: Optional[str] = "user" # "user" atau "doctor"
+    device_uuid: Optional[str] = None
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+    role: Optional[str] = None
+
+class AuthResponse(BaseModel):
+    status: str
+    user_id: str
+    email: str
+    nickname: str
+    role: str = "user" # "user" atau "doctor"
+    token: Optional[str] = None
+    message: Optional[str] = None
+    psychologist_id: Optional[str] = None
+
+class UpdateBookingStatusRequest(BaseModel):
+    status: str = Field(..., description="'pending', 'confirmed', 'completed', 'cancelled'")
+    notes: Optional[str] = None
+
+class UpdateDoctorStatusRequest(BaseModel):
+    is_available: bool
+
+class UpdateDoctorProfileRequest(BaseModel):
+    doctor_id: Optional[str] = None
+    name: Optional[str] = None
+    role: Optional[str] = None
+    price: Optional[str] = None
+    experience: Optional[str] = None
+    hospital: Optional[str] = None
+    education: Optional[str] = None
+    str_number: Optional[str] = None
+    bio: Optional[str] = None
+    available_days: Optional[List[str]] = None
+    available_slots: Optional[List[str]] = None
+    is_available: Optional[bool] = None
+
+class ChargeRequest(BaseModel):
+    user_uuid: str
+    psychologist_id: str
+    schedule_time: str
+    payment_type: str = "bank_transfer" # bank_transfer, qris, gopay
+    bank: Optional[str] = "bca" # bca, bni, bri, mandiri
+    gross_amount: int = 250000
+    notes: Optional[str] = None
+
+class DoctorMessageRequest(BaseModel):
+    booking_id: str
+    sender_id: str
+    sender_name: str
+    sender_role: str = "user" # user / doctor
+    message: str
+
+
+

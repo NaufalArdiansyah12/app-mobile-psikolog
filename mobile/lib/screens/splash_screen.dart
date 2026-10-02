@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_screen.dart';
-import '../widgets/rive_illustration.dart';
 
 class WalkthroughSlide {
   final String title;
@@ -65,7 +64,7 @@ class _SplashScreenState extends State<SplashScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // Ambient Warm Glow Spotlight (Sesuai referensi HTML)
+            // Ambient Aqua Glow Spotlight
             Positioned(
               top: 20,
               left: 0,
@@ -76,13 +75,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   height: 300,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        const Color(0xFFEFECE6).withValues(alpha: 0.8),
-                        const Color(0xFFF7F4EE).withValues(alpha: 0.4),
-                        Colors.transparent,
-                      ],
-                    ),
+                    color: const Color(0xFFCCFBF1).withValues(alpha: 0.35),
                   ),
                 ),
               ),
@@ -275,23 +268,23 @@ class _SplashScreenState extends State<SplashScreen> {
           height: 120,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [Color(0xFF0A0A0A), Color(0xFF27272A)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: const Color(0xFF0D9488),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
+                color: const Color(0xFF0D9488).withValues(alpha: 0.3),
                 blurRadius: 20,
                 spreadRadius: 2,
               ),
             ],
           ),
-          child: const RiveIllustration(
-            asset: 'assets/rive/chat_app_animation.riv',
-            fallbackIcon: Icons.chat_bubble_outline_rounded,
-            fallbackColor: Color(0xFF0A0A0A),
+          child: Image.asset(
+            'assets/illustrations/chat_bubble_3d.png',
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => const Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 50,
+              color: Colors.white,
+            ),
           ),
         ),
       ],
@@ -337,16 +330,18 @@ class _SplashScreenState extends State<SplashScreen> {
               height: 90,
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                color: Color(0xFF0D9488),
               ),
-              child: const RiveIllustration(
-                asset: 'assets/rive/breathing_animation.riv',
-                fallbackIcon: Icons.self_improvement,
-                fallbackSize: 45,
+              child: Image.asset(
+                'assets/illustrations/meditation_3d.png',
+                width: 90,
+                height: 90,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.self_improvement,
+                  size: 45,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
@@ -399,10 +394,14 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
             ],
           ),
-          child: const RiveIllustration(
-            asset: 'assets/rive/secure_folder_animation.riv',
-            fallbackIcon: Icons.lock_person_outlined,
-            fallbackColor: Color(0xFF18181B),
+          child: Image.asset(
+            'assets/illustrations/blue_shield_3d.png',
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => const Icon(
+              Icons.lock_person_outlined,
+              size: 50,
+              color: Color(0xFF18181B),
+            ),
           ),
         ),
       ],
