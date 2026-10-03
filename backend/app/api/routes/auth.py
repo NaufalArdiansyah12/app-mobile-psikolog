@@ -182,18 +182,29 @@ def login(req: LoginRequest):
                 nickname = user_meta.get("nickname")
                 role = user_meta.get("role", "user")
 
-                # Coba ambil role & nickname dari public.users jika ada
+                # Validasi keberadaan user di tabel public.users
                 if admin_sp:
                     try:
                         u = admin_sp.table("users").select("*").eq("id", user_id).execute()
-                        if u.data:
-                            user_row = u.data[0]
-                            if not nickname and user_row.get("nickname"):
-                                nickname = user_row.get("nickname")
-                            if user_row.get("role"):
-                                role = user_row.get("role")
-                    except Exception:
-                        pass
+                        if not u.data:
+                            # User telah dihapus dari tabel database public.users
+                            try:
+                                admin_sp.auth.admin.delete_user(user_id)
+                            except Exception:
+                                pass
+                            raise HTTPException(
+                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail="Akun tidak ditemukan atau telah dihapus dari database."
+                            )
+                        user_row = u.data[0]
+                        if not nickname and user_row.get("nickname"):
+                            nickname = user_row.get("nickname")
+                        if user_row.get("role"):
+                            role = user_row.get("role")
+                    except HTTPException:
+                        raise
+                    except Exception as e:
+                        print(f"Supabase check user existence error: {e}")
 
                 if not nickname:
                     nickname = email.split("@")[0]

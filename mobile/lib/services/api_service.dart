@@ -427,6 +427,28 @@ class ApiService {
       if (supaRes.statusCode == 200) {
         final supaData = jsonDecode(supaRes.body);
         final user = supaData['user'] ?? {};
+        final userId = user['id'];
+
+        if (userId != null) {
+          // Validasi apakah akun masih terdaftar di tabel public.users
+          final checkUserRes = await http.get(
+            Uri.parse('$supabaseUrl/rest/v1/users?id=eq.$userId&select=id,nickname,role'),
+            headers: {
+              'apikey': supabaseAnonKey,
+              'Authorization': 'Bearer $supabaseAnonKey',
+            },
+          );
+          if (checkUserRes.statusCode == 200) {
+            final userList = jsonDecode(checkUserRes.body) as List;
+            if (userList.isEmpty) {
+              return AuthResult(
+                success: false,
+                errorMessage: 'Akun tidak ditemukan atau telah dihapus dari database.',
+              );
+            }
+          }
+        }
+
         final userMeta = user['user_metadata'] ?? {};
         final role = userMeta['role'] ?? (cleanEmail.contains('dokter') ? 'doctor' : 'user');
         final nickname = userMeta['nickname'] ?? (role == 'doctor' ? 'dr. Nadia S., Sp.KJ' : cleanEmail.split('@').first);
@@ -1440,12 +1462,29 @@ class ApiService {
     try {
       const supabaseUrl = 'https://ydlzrtpdsqaobxidrjvc.supabase.co';
       final supabaseServiceKey = _supabaseKey;
+      final headers = {
+        'apikey': supabaseServiceKey,
+        'Authorization': 'Bearer $supabaseServiceKey',
+      };
+
+      // Cari user_id dari device_uuid
+      final userRes = await http.get(
+        Uri.parse('$supabaseUrl/rest/v1/users?device_uuid=eq.$userUuid&select=id'),
+        headers: headers,
+      );
+      String? userId;
+      if (userRes.statusCode == 200) {
+        final users = jsonDecode(userRes.body) as List;
+        if (users.isNotEmpty) {
+          userId = users.first['id']?.toString();
+        }
+      }
+
+      if (userId == null || userId.isEmpty) return [];
+
       final res = await http.get(
-        Uri.parse('$supabaseUrl/rest/v1/bookings?status=eq.confirmed&select=id,schedule_time,status,created_at,psychologists(id,name,role,hospital,price)&order=created_at.desc'),
-        headers: {
-          'apikey': supabaseServiceKey,
-          'Authorization': 'Bearer $supabaseServiceKey',
-        },
+        Uri.parse('$supabaseUrl/rest/v1/bookings?user_id=eq.$userId&status=eq.confirmed&select=id,schedule_time,status,created_at,psychologists(id,name,role,hospital,price)&order=created_at.desc'),
+        headers: headers,
       );
       if (res.statusCode == 200) {
         final list = jsonDecode(res.body) as List;

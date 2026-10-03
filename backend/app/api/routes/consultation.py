@@ -462,8 +462,10 @@ def get_user_bookings(user_uuid: str):
                 user_id = user_res.data[0]["id"]
                 res = sp.table("bookings").select("*, psychologists(name, role, price)").eq("user_id", user_id).order("created_at", desc=True).execute()
                 return {"user_uuid": user_uuid, "count": len(res.data), "bookings": res.data}
+            return {"user_uuid": user_uuid, "count": 0, "bookings": []}
         except Exception as e:
             print(f"Supabase bookings query failed: {e}")
+            return {"user_uuid": user_uuid, "count": 0, "bookings": []}
 
     user_bookings = [b for b in _inmemory_bookings if b.get("user_uuid") == user_uuid]
     return {"user_uuid": user_uuid, "count": len(user_bookings), "bookings": user_bookings}
@@ -475,7 +477,7 @@ def get_booked_schedules(psychologist_id: str):
     sp = get_supabase()
     schedules = []
 
-    # 1. Supabase
+    # 1. Supabase (Database riil realtime)
     if sp:
         try:
             psy_id = psychologist_id
@@ -488,10 +490,12 @@ def get_booked_schedules(psychologist_id: str):
                     sched = r.get("schedule_time")
                     if sched and sched not in schedules:
                         schedules.append(sched)
+            return {"psychologist_id": psychologist_id, "count": len(schedules), "schedules": schedules}
         except Exception as e:
             print(f"Supabase booked schedules query error: {e}")
+            return {"psychologist_id": psychologist_id, "count": 0, "schedules": []}
 
-    # 2. In-memory
+    # 2. In-memory (Hanya jika Supabase tidak terhubung)
     for b in _inmemory_bookings:
         if b.get("status") == "confirmed":
             sched = b.get("schedule_time")
@@ -509,11 +513,12 @@ def get_user_active_sessions(user_uuid: str):
 
     if sp:
         try:
-            user_id = user_uuid
             u_res = sp.table("users").select("id").eq("device_uuid", user_uuid).execute()
-            if u_res.data:
-                user_id = u_res.data[0]["id"]
+            if not u_res.data:
+                # User tidak ada di database, kembalikan kosong realtime
+                return {"user_uuid": user_uuid, "count": 0, "sessions": []}
 
+            user_id = u_res.data[0]["id"]
             res = sp.table("bookings").select("id, schedule_time, status, created_at, psychologists(id, name, role, hospital, price)").eq("user_id", user_id).eq("status", "confirmed").order("created_at", desc=True).execute()
             if res.data:
                 for b in res.data:
@@ -531,25 +536,27 @@ def get_user_active_sessions(user_uuid: str):
                             "price": doc.get("price", "Rp 250.000")
                         }
                     })
+            # Kembalikan data realtime dari Supabase
+            return {"user_uuid": user_uuid, "count": len(active_sessions), "sessions": active_sessions}
         except Exception as e:
             print(f"Supabase user active sessions query error: {e}")
+            return {"user_uuid": user_uuid, "count": 0, "sessions": []}
 
-    # Fallback in-memory
-    if not active_sessions:
-        for b in _inmemory_bookings:
-            if b.get("status") == "confirmed":
-                active_sessions.append({
-                    "booking_id": b.get("id"),
-                    "schedule_time": b.get("schedule_time"),
-                    "status": "confirmed",
-                    "created_at": datetime.utcnow().isoformat(),
-                    "doctor": {
-                        "id": b.get("psychologist_id", "psy_1"),
-                        "name": "dr. Nadia S., Sp.KJ",
-                        "role": "Psikiater Klinis",
-                        "hospital": "RS Mitra Sehat Jakarta",
-                        "price": "Rp 250.000"
-                    }
-                })
+    # Fallback in-memory (Hanya jika Supabase tidak terhubung)
+    for b in _inmemory_bookings:
+        if b.get("user_uuid") == user_uuid and b.get("status") == "confirmed":
+            active_sessions.append({
+                "booking_id": b.get("id"),
+                "schedule_time": b.get("schedule_time"),
+                "status": "confirmed",
+                "created_at": datetime.utcnow().isoformat(),
+                "doctor": {
+                    "id": b.get("psychologist_id", "psy_1"),
+                    "name": "dr. Nadia S., Sp.KJ",
+                    "role": "Psikiater Klinis",
+                    "hospital": "RS Mitra Sehat Jakarta",
+                    "price": "Rp 250.000"
+                }
+            })
 
     return {"user_uuid": user_uuid, "count": len(active_sessions), "sessions": active_sessions}

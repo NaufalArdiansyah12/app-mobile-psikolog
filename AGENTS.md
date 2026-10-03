@@ -2,11 +2,12 @@
 
 ## Struktur Repo
 
-Monorepo dua paket:
+Monorepo:
 
 ```
-backend/   ← FastAPI (Python) modular Clean Architecture + Supabase DB + 9router AI Gateway
-mobile/    ← Flutter (Dart)   cross-platform Android/iOS client
+backend/              ← FastAPI (Python) terpadu: Mobile API + Admin Panel API
+mobile/               ← Flutter (Dart) cross-platform Android/iOS client
+adminpanel/frontend/  ← Next.js 15 (React 19) Dashboard Web Admin
 ```
 
 ## Backend (FastAPI)
