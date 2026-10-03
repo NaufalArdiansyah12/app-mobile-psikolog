@@ -11,7 +11,7 @@ from app.admin.utils import PaginationParams
 
 
 def serialize(user: User) -> Dict[str, Any]:
-    return {
+    data: Dict[str, Any] = {
         "id": user.id,
         "name": user.name,
         "email": user.email,
@@ -22,6 +22,15 @@ def serialize(user: User) -> Dict[str, Any]:
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
+    if user.role == "doctor" and getattr(user, "doctor", None) is not None:
+        data["doctor"] = {
+            "id": user.doctor.id,
+            "specialization": user.doctor.specialization,
+            "license_number": user.doctor.license_number,
+            "verification_status": user.doctor.verification_status,
+            "is_active": bool(user.doctor.is_active),
+        }
+    return data
 
 
 def list_users(

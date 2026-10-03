@@ -124,7 +124,7 @@ class _LaunchSplashScreenState extends State<LaunchSplashScreen>
                 ),
                 const SizedBox(height: 26),
                 Text(
-                  "MindPal",
+                  "Hevenly",
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 30,
                     fontWeight: FontWeight.w800,

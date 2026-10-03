@@ -195,7 +195,7 @@ class _DoctorBookingsScreenState extends State<DoctorBookingsScreen> {
 
   Widget _buildBookingCard(Map<String, dynamic> item) {
     final status = (item['status'] ?? 'pending').toString().toLowerCase();
-    final patientName = item['patient_name'] ?? 'Pasien MindPal';
+    final patientName = item['patient_name'] ?? 'Pasien Hevenly';
     final scheduleTime = item['schedule_time'] ?? 'Jadwal belum ditentukan';
     final notes = item['notes'] ?? 'Tidak ada catatan keluhan tambahan.';
     final bookingId = item['id'] ?? '';

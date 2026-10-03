@@ -17,20 +17,20 @@ void main() {
   });
 
   testWidgets('App starts with OnboardingScreen walkthrough on fresh install', (WidgetTester tester) async {
-    await tester.pumpWidget(const MindPalApp(initialScreen: OnboardingScreen()));
+    await tester.pumpWidget(const HevenlyApp(initialScreen: OnboardingScreen()));
     expect(find.textContaining('Curhat Bebas'), findsOneWidget);
     expect(find.text('LEWATI'), findsOneWidget);
     expect(find.text('LANJUT'), findsOneWidget);
   });
 
   testWidgets('App starts with LaunchSplashScreen for returning user', (WidgetTester tester) async {
-    await tester.pumpWidget(const MindPalApp(initialScreen: LaunchSplashScreen()));
-    expect(find.text('MindPal'), findsOneWidget);
-    expect(find.text('Ruang aman untuk bercerita'), findsOneWidget);
+    await tester.pumpWidget(const HevenlyApp(initialScreen: LaunchSplashScreen()));
+    expect(find.text('Hevenly'), findsOneWidget);
+    expect(find.text('Ruang aman untuk bercerita & pulih'), findsOneWidget);
   });
 
   testWidgets('MainNavigationScreen shows confirmation modal when leaving unsaved chat', (WidgetTester tester) async {
-    await tester.pumpWidget(const MindPalApp(initialScreen: MainNavigationScreen()));
+    await tester.pumpWidget(const HevenlyApp(initialScreen: MainNavigationScreen()));
     await tester.pumpAndSettle();
 
     // Switch to Chat tab (index 2)
@@ -40,12 +40,12 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify on Chat tab
-    expect(find.text('MindPal AI'), findsOneWidget);
+    expect(find.text('Hevenly AI'), findsOneWidget);
 
     // Enter text and send message
     final textField = find.byType(TextField);
     expect(textField, findsOneWidget);
-    await tester.enterText(textField, 'Halo MindPal, aku butuh teman');
+    await tester.enterText(textField, 'Halo Hevenly, aku butuh teman');
     final sendButton = find.byIcon(Icons.send_rounded);
     await tester.tap(sendButton);
     await tester.pump();
@@ -65,7 +65,7 @@ void main() {
     await tester.tap(find.text('Batal'));
     await tester.pumpAndSettle();
     expect(find.text('Simpan Percakapan?'), findsNothing);
-    expect(find.text('MindPal AI'), findsOneWidget);
+    expect(find.text('Hevenly AI'), findsOneWidget);
   });
 
   testWidgets('ChatSessionDetailScreen has button to continue chat with AI', (WidgetTester tester) async {

@@ -32,7 +32,6 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   String _about = '';
   List<String> _days = [];
   List<String> _slots = [];
-  bool _hasPin = false;
 
   static const Color primaryTeal = Color(0xFF006D77);
   static const Color accentTeal = Color(0xFF0D9488);
@@ -48,7 +47,6 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
     final name = await _storage.getNickname();
     final email = await _storage.getUserEmail();
     final avatar = await _storage.getUserAvatar();
-    final hasPin = await _storage.hasPin();
 
     final savedDays = await _storage.getDoctorScheduleDays();
     final savedSlots = await _storage.getDoctorScheduleSlots();
@@ -100,10 +98,9 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
 
     if (mounted) {
       setState(() {
-        if (name.isNotEmpty && name != 'Sobat MindPal') _doctorName = name;
+        if (name.isNotEmpty && name != 'Sobat Hevenly' && name != 'Sobat Havenly' && name != 'Sobat MindPal') _doctorName = name;
         if (email != null && email.isNotEmpty) _doctorEmail = email;
         if (avatar != null && avatar.isNotEmpty) _avatarType = avatar;
-        _hasPin = hasPin;
 
         _days = days;
         _slots = slots;
@@ -464,216 +461,6 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
     );
   }
 
-  // MODAL KEAMANAN & PIN
-  void _openSecurityModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (secCtx, setSecState) {
-          return Container(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(34)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFCBD5E1),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-
-                Row(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: softTealBg,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(Icons.shield_outlined, color: primaryTeal, size: 24),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Keamanan Akun Dokter',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF0F172A),
-                          ),
-                        ),
-                        Text(
-                          'Proteksi PIN untuk keamanan data medis pasien',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            color: const Color(0xFF64748B),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                // PIN Protection Tile
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: _hasPin ? const Color(0xFFECFDF5) : const Color(0xFFFEF3C7),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          _hasPin ? Icons.lock_rounded : Icons.lock_open_rounded,
-                          color: _hasPin ? const Color(0xFF059669) : const Color(0xFFD97706),
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _hasPin ? 'PIN Aplikasi Aktif' : 'PIN Belum Diatur',
-                              style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                            ),
-                            Text(
-                              _hasPin ? 'Memerlukan PIN untuk membuka sesi chat' : 'Kunci aplikasi saat membuka rekam medis',
-                              style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF64748B)),
-                            ),
-                          ],
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(secCtx);
-                          _openSetupPinModal();
-                        },
-                        child: Text(
-                          _hasPin ? 'Ubah' : 'Atur',
-                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: primaryTeal),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryTeal,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                    ),
-                    onPressed: () => Navigator.pop(secCtx),
-                    child: Text('Selesai', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _openSetupPinModal() {
-    final pinCtrl = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dlgCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text(
-          'Atur 4-Digit PIN Dokter',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 18),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Masukkan 4 digit angka untuk mengamankan portal praktik dokter.',
-              style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: pinCtrl,
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              obscureText: true,
-              style: GoogleFonts.plusJakartaSans(fontSize: 20, letterSpacing: 8, fontWeight: FontWeight.w800),
-              textAlign: TextAlign.center,
-              decoration: InputDecoration(
-                hintText: '••••',
-                counterText: '',
-                filled: true,
-                fillColor: const Color(0xFFF8FAFC),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dlgCtx),
-            child: Text('Batal', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryTeal,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            onPressed: () async {
-              final pin = pinCtrl.text.trim();
-              if (pin.length != 4) {
-                _showSnackBar('PIN harus berupa 4 angka');
-                return;
-              }
-              await _storage.setPin(pin);
-              setState(() => _hasPin = true);
-              if (dlgCtx.mounted) Navigator.pop(dlgCtx);
-              _showSnackBar('PIN dokter berhasil disimpan!');
-            },
-            child: Text('Simpan PIN', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
-    );
-  }
-
   // MODAL LOGOUT
   void _openLogoutModal() {
     showModalBottomSheet(
@@ -857,9 +644,8 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
           label,
           style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
         ),
-        const Spacer(),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 160),
+        const SizedBox(width: 12),
+        Expanded(
           child: Text(
             value,
             textAlign: TextAlign.end,
@@ -1116,17 +902,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                       onTap: _openCredentialsModal,
                     ),
 
-                    // 3. Keamanan & PIN
-                    _buildMenuItem(
-                      icon: Icons.lock_outline_rounded,
-                      iconBg: const Color(0xFFF3E8FF),
-                      iconColor: const Color(0xFF9333EA),
-                      title: 'Keamanan & Proteksi PIN',
-                      subtitle: _hasPin ? 'PIN 4-digit aktif' : 'Aktifkan PIN untuk keamanan medis',
-                      onTap: _openSecurityModal,
-                    ),
-
-                    // 4. Keluar
+                    // 3. Keluar
                     _buildMenuItem(
                       icon: Icons.logout_rounded,
                       iconBg: const Color(0xFFFEE2E2),

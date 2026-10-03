@@ -71,7 +71,7 @@ class ChatScreenState extends State<ChatScreen> {
           _messages.add(
             ChatMessage(
               role: 'assistant',
-              content: "Halo $_userName. Aku MindPal, pendamping emosionalmu. Apa yang sedang membebani pikiranmu saat ini?",
+              content: "Halo $_userName. Aku Hevenly, pendamping emosionalmu. Apa yang sedang membebani pikiranmu saat ini?",
             ),
           );
         }
@@ -334,7 +334,7 @@ class ChatScreenState extends State<ChatScreen> {
           _messages.add(
             ChatMessage(
               role: 'assistant',
-              content: "Halo $_userName. Aku MindPal, pendamping emosionalmu. Apa yang sedang membebani pikiranmu saat ini?",
+              content: "Halo $_userName. Aku Hevenly, pendamping emosionalmu. Apa yang sedang membebani pikiranmu saat ini?",
             ),
           );
           _hasUnsavedMessages = false;
@@ -349,7 +349,7 @@ class ChatScreenState extends State<ChatScreen> {
           _messages.add(
             ChatMessage(
               role: 'assistant',
-              content: "Halo $_userName. Aku MindPal, pendamping emosionalmu. Apa yang sedang membebani pikiranmu saat ini?",
+              content: "Halo $_userName. Aku Hevenly, pendamping emosionalmu. Apa yang sedang membebani pikiranmu saat ini?",
             ),
           );
           _hasUnsavedMessages = false;
@@ -523,7 +523,7 @@ class ChatScreenState extends State<ChatScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          "MindPal AI",
+                          "Hevenly AI",
                           style: GoogleFonts.plusJakartaSans(
                             fontWeight: FontWeight.w800,
                             fontSize: 15,
@@ -621,15 +621,6 @@ class ChatScreenState extends State<ChatScreen> {
                     icon: const Icon(Icons.air_rounded, color: Colors.white, size: 20),
                     tooltip: "Latihan Napas",
                     onPressed: _showBreathingModal,
-                  ),
-                  const SizedBox(width: 2),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.all(4),
-                    constraints: const BoxConstraints(),
-                    icon: const Icon(Icons.sos_rounded, color: Color(0xFFFECDD3), size: 20),
-                    tooltip: "Bantuan Darurat SOS",
-                    onPressed: () => CrisisModalOverlay.show(context),
                   ),
                 ],
               ),

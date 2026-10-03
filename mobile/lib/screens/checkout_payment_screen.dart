@@ -109,7 +109,7 @@ class _CheckoutPaymentScreenState extends State<CheckoutPaymentScreen> {
     final doc = widget.doctor;
     final String name = doc['name'] ?? 'dr. Nadia S., Sp.KJ';
     final String role = doc['role'] ?? 'Psikiater Klinis Dewasa';
-    final String hospital = doc['hospital'] ?? 'Praktek Online MindPal';
+    final String hospital = doc['hospital'] ?? 'Praktek Online Hevenly';
     final int sessionFee = _parsePrice(doc['fee'] ?? doc['price']);
     const int adminFee = 0;
     final int totalAmount = sessionFee + adminFee;

@@ -26,7 +26,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _email = '';
   String _bio = 'Graphics and Web Designer';
   String _avatarType = 'asset:assets/gambar_home.jpeg';
-  bool _hasPin = false;
 
   static const Color primaryTeal = Color(0xFF006D77);
   static const Color accentTeal = Color(0xFF0D9488);
@@ -55,7 +54,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final email = await _storage.getUserEmail();
     final bio = await _storage.getUserBio();
     final avatar = await _storage.getUserAvatar();
-    final hasPin = await _storage.hasPin();
     if (!mounted) return;
     setState(() {
       _nickname = name.isNotEmpty ? name : 'Nina Sarah';
@@ -63,7 +61,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _email = email ?? '';
       _bio = bio.isNotEmpty ? bio : 'Graphics and Web Designer';
       _avatarType = avatar ?? 'asset:assets/gambar_home.jpeg';
-      _hasPin = hasPin;
     });
   }
 
@@ -678,8 +675,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.public_rounded,
               iconColor: primaryTeal,
               iconBg: softTealBg,
-              title: "Website Resmi MindPal",
-              subtitle: "mindpal.health • Portal artikel & layanan klinis",
+              title: "Website Resmi Hevenly",
+              subtitle: "hevenly.health • Portal artikel & layanan klinis",
               onTap: () {
                 _safeLaunchUrl("https://mindpal.health");
               },
@@ -821,20 +818,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // PIN Protection Toggle
-                _buildActionTile(
-                  icon: Icons.lock_clock_rounded,
-                  iconColor: primaryTeal,
-                  iconBg: softTealBg,
-                  title: _hasPin ? "PIN Aplikasi Aktif" : "Pasang PIN Aplikasi",
-                  subtitle: _hasPin ? "Klik untuk mengubah atau memperbarui 4-digit PIN" : "Lindungi akses obrolan saat aplikasi dibuka",
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _openSetupPinModal();
-                  },
-                ),
-                const SizedBox(height: 8),
-
                 // Bersihkan Cache Lokal
                 _buildActionTile(
                   icon: Icons.cleaning_services_rounded,
@@ -869,76 +852,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           );
         },
-      ),
-    );
-  }
-
-  // Modal Setup PIN
-  void _openSetupPinModal() {
-    final pinCtrl = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dlgCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text(
-          "Atur 4-Digit PIN",
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 18),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Masukkan 4 digit angka untuk mengunci aplikasi MindPal.",
-              style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: pinCtrl,
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              obscureText: true,
-              style: GoogleFonts.plusJakartaSans(fontSize: 20, letterSpacing: 8, fontWeight: FontWeight.w800),
-              textAlign: TextAlign.center,
-              decoration: InputDecoration(
-                hintText: "••••",
-                counterText: "",
-                filled: true,
-                fillColor: const Color(0xFFF8FAFC),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dlgCtx),
-            child: Text("Batal", style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryTeal,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            onPressed: () async {
-              final pin = pinCtrl.text.trim();
-              if (pin.length != 4) {
-                _showSnackBar("PIN harus berupa 4 angka");
-                return;
-              }
-              await _storage.setPin(pin);
-              setState(() => _hasPin = true);
-              if (dlgCtx.mounted) Navigator.pop(dlgCtx);
-              if (mounted) _showSnackBar("PIN berhasil diaktifkan!");
-            },
-            child: Text("Simpan PIN", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
-          ),
-        ],
       ),
     );
   }
@@ -1064,6 +977,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     bool obscureOld = true;
     bool obscureNew = true;
     bool obscureConfirm = true;
+    bool isLoading = false;
 
     showModalBottomSheet(
       context: context,
@@ -1208,33 +1122,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
                       ),
-                      onPressed: () async {
+                      onPressed: isLoading ? null : () async {
+                        final oldPass = oldPassCtrl.text.trim();
                         final newPass = newPassCtrl.text.trim();
                         final confPass = confirmPassCtrl.text.trim();
 
+                        if (oldPass.isEmpty) {
+                          _showSnackBar("Masukkan password saat ini.");
+                          return;
+                        }
                         if (newPass.length < 6) {
-                          _showSnackBar("Password minimal 6 karakter");
+                          _showSnackBar("Password baru minimal 6 karakter.");
                           return;
                         }
                         if (newPass != confPass) {
-                          _showSnackBar("Password konfirmasi tidak cocok");
+                          _showSnackBar("Password konfirmasi tidak cocok.");
                           return;
                         }
 
-                        await _storage.setUserPassword(newPass);
-                        if (modalCtx.mounted) Navigator.pop(modalCtx);
+                        var emailToUse = _email;
+                        if (emailToUse.isEmpty) {
+                          emailToUse = await _storage.getUserEmail() ?? '';
+                        }
+                        if (emailToUse.isEmpty) {
+                          _showSnackBar("Akun anonim belum memiliki email terdaftar.");
+                          return;
+                        }
 
-                        if (mounted) {
-                          _showSnackBar("Password berhasil diperbarui!");
+                        setModalState(() => isLoading = true);
+
+                        final result = await _apiService.changePassword(
+                          email: emailToUse,
+                          oldPassword: oldPass,
+                          newPassword: newPass,
+                        );
+
+                        setModalState(() => isLoading = false);
+
+                        if (result['success'] == true) {
+                          await _storage.setUserPassword(newPass);
+                          if (modalCtx.mounted) Navigator.pop(modalCtx);
+                          if (mounted) {
+                            _showSnackBar(result['message'] ?? "Password berhasil diperbarui!");
+                          }
+                        } else {
+                          if (mounted) {
+                            _showSnackBar(result['message'] ?? "Gagal memperbarui password.");
+                          }
                         }
                       },
-                      child: Text(
-                        "Simpan Password Baru",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
+                      child: isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : Text(
+                              "Simpan Password Baru",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                     ),
                   ),
                 ],
@@ -1519,7 +1468,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 8),
 
             Text(
-              "Kamu perlu masuk kembali dengan email dan kata sandi untuk mengakses obrolan MindPal.",
+              "Kamu perlu masuk kembali dengan email dan kata sandi untuk mengakses obrolan Hevenly.",
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 12.5,
                 color: const Color(0xFF64748B),
@@ -1624,7 +1573,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Pusat Bantuan & Kontak",
+                        "Pusat Bantuan & Panduan",
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
@@ -1632,7 +1581,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       Text(
-                        "Panduan fitur dan kontak krisis darurat 24/7",
+                        "Panduan fitur dan petunjuk penggunaan aplikasi",
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 12,
                           color: const Color(0xFF64748B),
@@ -1644,72 +1593,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 18),
 
-              // Emergency Hotlines Cards
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF1F2),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFFFECDD3)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.emergency_rounded, color: Color(0xFFE11D48), size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          "Kontak Bantuan Darurat",
-                          style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w800, color: const Color(0xFF9F1239)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "Jika kamu atau seseorang sedang dalam bahaya menyakiti diri, segera hubungi:",
-                      style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF4C0519), height: 1.4),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFE11D48),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            icon: const Icon(Icons.phone_in_talk_rounded, size: 16),
-                            label: Text("Panggil 119", style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700)),
-                            onPressed: () => _safeLaunchUrl("tel:119"),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFFE11D48),
-                              side: const BorderSide(color: Color(0xFFE11D48)),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            icon: const Icon(Icons.support_agent_rounded, size: 16),
-                            label: Text("Halo Sejiwa", style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700)),
-                            onPressed: () => _safeLaunchUrl("tel:119,8"),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-
               _buildHelpGuideItem(
                 Icons.auto_awesome_rounded,
-                "MindPal AI CBT",
+                "Hevenly AI CBT",
                 "Sahabat AI empatik yang menerapkan Cognitive Behavioral Therapy untuk membantumu mengurai overthinking kapan pun.",
               ),
               const SizedBox(height: 10),
@@ -1899,10 +1785,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           label,
           style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
         ),
-        const Spacer(),
-        Text(
-          value,
-          style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
+          ),
         ),
       ],
     );
@@ -2254,7 +2145,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       iconBg: softTealBg,
                       iconColor: accentTeal,
                       title: "Social Media",
-                      subtitle: "Komunitas MindPal & saluran edukasi",
+                      subtitle: "Komunitas Hevenly & saluran edukasi",
                       onTap: _openSocialMediaModal,
                     ),
 
@@ -2264,7 +2155,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       iconBg: softTealBg,
                       iconColor: accentTeal,
                       title: "Security",
-                      subtitle: "Enkripsi Zero-KYC, PIN & pembersih cache",
+                      subtitle: "Enkripsi Zero-KYC & pembersih cache",
                       onTap: _openSecurityModal,
                     ),
 
@@ -2288,7 +2179,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       iconBg: const Color(0xFFF1F5F9),
                       iconColor: const Color(0xFF334155),
                       title: "Help",
-                      subtitle: "Panduan fitur & kontak darurat SOS 119",
+                      subtitle: "Panduan fitur & petunjuk aplikasi",
                       onTap: _openHelpModal,
                     ),
 

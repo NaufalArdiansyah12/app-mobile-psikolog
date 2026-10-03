@@ -4,7 +4,7 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, status
 from app.core.database import get_supabase
-from app.models.schemas import BookingRequest, ChargeRequest, DoctorMessageRequest
+from app.models.schemas import BookingRequest, ChargeRequest, DoctorMessageRequest, DoctorReviewRequest
 from app.services.midtrans_service import MidtransService
 
 router = APIRouter(prefix="/consultation", tags=["Konsultasi, Midtrans & Chat Dokter"])
@@ -171,7 +171,7 @@ def charge_payment(req: ChargeRequest):
     order_id = f"MP-{int(time.time())}-{uuid.uuid4().hex[:4].upper()}"
 
     # Cari info dokter
-    doctor_name = "dr. Spesialis MindPal"
+    doctor_name = "dr. Spesialis Havenly"
     for doc in _default_psychologists:
         if str(doc.get("id")) == str(req.psychologist_id):
             doctor_name = doc.get("name", doctor_name)
@@ -183,7 +183,7 @@ def charge_payment(req: ChargeRequest):
         gross_amount=req.gross_amount,
         payment_type=req.payment_type,
         bank=req.bank or "bca",
-        customer_name="Pasien MindPal"
+        customer_name="Pasien Havenly"
     )
 
     # Simpan booking ke Supabase (status pending bayar)
@@ -397,7 +397,7 @@ def get_doctor_chat_messages(booking_id: str):
                 "sender_id": "doctor_id",
                 "sender_name": "dr. Nadia S., Sp.KJ",
                 "sender_role": "doctor",
-                "message": "Halo! Selamat datang di sesi konsultasi privat MindPal. Saya dr. Nadia. Bagaimana kabar Anda hari ini? Ceritakan apa yang sedang Anda rasakan.",
+                "message": "Halo! Selamat datang di sesi konsultasi privat Havenly. Saya dr. Nadia. Bagaimana kabar Anda hari ini? Ceritakan apa yang sedang Anda rasakan.",
                 "created_at": datetime.utcnow().isoformat()
             }
         ]
@@ -532,7 +532,7 @@ def get_user_active_sessions(user_uuid: str):
                             "id": doc.get("id", "psy_1"),
                             "name": doc.get("name", "dr. Nadia S., Sp.KJ"),
                             "role": doc.get("role", "Psikiater Klinis"),
-                            "hospital": doc.get("hospital", "MindPal Telekonseling"),
+                            "hospital": doc.get("hospital", "Havenly Telekonseling"),
                             "price": doc.get("price", "Rp 250.000")
                         }
                     })
@@ -542,21 +542,85 @@ def get_user_active_sessions(user_uuid: str):
             print(f"Supabase user active sessions query error: {e}")
             return {"user_uuid": user_uuid, "count": 0, "sessions": []}
 
-    # Fallback in-memory (Hanya jika Supabase tidak terhubung)
-    for b in _inmemory_bookings:
-        if b.get("user_uuid") == user_uuid and b.get("status") == "confirmed":
-            active_sessions.append({
-                "booking_id": b.get("id"),
-                "schedule_time": b.get("schedule_time"),
-                "status": "confirmed",
-                "created_at": datetime.utcnow().isoformat(),
-                "doctor": {
-                    "id": b.get("psychologist_id", "psy_1"),
-                    "name": "dr. Nadia S., Sp.KJ",
-                    "role": "Psikiater Klinis",
-                    "hospital": "RS Mitra Sehat Jakarta",
-                    "price": "Rp 250.000"
-                }
-            })
-
     return {"user_uuid": user_uuid, "count": len(active_sessions), "sessions": active_sessions}
+
+# In-memory storage reviews fallback
+_inmemory_reviews: List[Dict[str, Any]] = []
+
+@router.post("/reviews")
+def submit_doctor_review(req: DoctorReviewRequest):
+    """Menyimpan rating dan ulasan pasien untuk dokter setelah sesi selesai."""
+    sp = get_supabase()
+    review_data = {
+        "id": str(uuid.uuid4()),
+        "booking_id": req.booking_id,
+        "psychologist_id": req.psychologist_id,
+        "user_id": req.user_id,
+        "user_name": req.user_name or "Pasien",
+        "rating": req.rating,
+        "comment": req.comment or "",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+
+    if sp:
+        try:
+            # 1. Pastikan tabel doctor_reviews siap di Supabase
+            sp.table("doctor_reviews").insert({
+                "id": review_data["id"],
+                "booking_id": review_data["booking_id"],
+                "psychologist_id": review_data["psychologist_id"],
+                "user_name": review_data["user_name"],
+                "rating": review_data["rating"],
+                "comment": review_data["comment"],
+            }).execute()
+
+            # 2. Recalculate average rating dokter di tabel psychologists
+            all_revs = sp.table("doctor_reviews").select("rating").eq("psychologist_id", req.psychologist_id).execute()
+            if all_revs.data and len(all_revs.data) > 0:
+                avg = sum(float(r["rating"]) for r in all_revs.data) / len(all_revs.data)
+                avg_rounded = round(avg, 1)
+                try:
+                    sp.table("psychologists").update({"rating": avg_rounded}).eq("id", req.psychologist_id).execute()
+                except Exception:
+                    pass
+
+            return {"status": "success", "message": "Rating berhasil disimpan!", "data": review_data}
+        except Exception as e:
+            print(f"Supabase doctor_reviews insert error: {e}")
+            # fallback jika tabel belum ada atau error DDL
+
+    _inmemory_reviews.append(review_data)
+    return {"status": "success", "message": "Rating berhasil disimpan (memori)!", "data": review_data}
+
+@router.get("/reviews/{doctor_id}")
+def get_doctor_reviews(doctor_id: str):
+    """Mendapatkan daftar ulasan dan rating rata-rata untuk dokter."""
+    sp = get_supabase()
+    if sp:
+        try:
+            res = sp.table("doctor_reviews").select("*").eq("psychologist_id", doctor_id).order("created_at", desc=True).execute()
+            if res.data is not None:
+                revs = res.data
+                avg_val = 5.0
+                if revs:
+                    avg_val = round(sum(float(r.get("rating", 5)) for r in revs) / len(revs), 1)
+                return {
+                    "doctor_id": doctor_id,
+                    "rating": avg_val,
+                    "total_reviews": len(revs),
+                    "reviews": revs
+                }
+        except Exception as e:
+            print(f"Supabase get_doctor_reviews error: {e}")
+
+    # Fallback in-memory
+    doc_revs = [r for r in _inmemory_reviews if r.get("psychologist_id") == doctor_id]
+    avg_val = 5.0
+    if doc_revs:
+        avg_val = round(sum(float(r.get("rating", 5)) for r in doc_revs) / len(doc_revs), 1)
+    return {
+        "doctor_id": doctor_id,
+        "rating": avg_val,
+        "total_reviews": len(doc_revs),
+        "reviews": doc_revs
+    }

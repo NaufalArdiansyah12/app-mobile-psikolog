@@ -21,6 +21,10 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
   bool _isFavorite = false;
   List<String> _bookedSchedules = [];
   bool _isLoadingSchedules = true;
+  List<Map<String, dynamic>> _liveReviews = [];
+  bool _isLoadingReviews = true;
+  double _liveRating = 5.0;
+  int _totalReviewCount = 0;
 
   final List<String> _timeSlots = [
     '09:00 - 11:00 WIB',
@@ -65,6 +69,22 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
     }
 
     _loadBookedSchedules();
+    _loadReviews();
+  }
+
+  void _loadReviews() async {
+    final docId = widget.doctor['id']?.toString() ?? 'psy_1';
+    final res = await _apiService.getDoctorReviews(docId);
+    if (!mounted) return;
+    setState(() {
+      _isLoadingReviews = false;
+      _liveRating = (res['rating'] as num?)?.toDouble() ?? 5.0;
+      _totalReviewCount = (res['total_reviews'] as int?) ?? 0;
+      final rawList = res['reviews'];
+      if (rawList is List) {
+        _liveReviews = rawList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+    });
   }
 
   void _loadBookedSchedules() async {
@@ -241,8 +261,8 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
     final String name = doc['name'] ?? 'dr. Nadia S., Sp.KJ';
     final String role = doc['role'] ?? 'Psikiater Klinis Dewasa';
     final String fee = doc['fee'] ?? doc['price'] ?? 'Rp 250.000';
-    final String rating = (doc['rating'] ?? '4.9').toString();
-    final String reviews = (doc['reviews'] ?? '340').toString();
+    final String displayRating = _totalReviewCount > 0 ? _liveRating.toStringAsFixed(1) : (doc['rating'] ?? '4.9').toString();
+    final String displayReviews = _totalReviewCount > 0 ? '$_totalReviewCount' : (doc['reviews'] ?? '340').toString();
     final String experience = doc['experience'] ?? '9 Tahun';
     final String patients = doc['patients'] ?? '2.100+';
     final String education = doc['education'] ?? 'Spesialis Kedokteran Jiwa - FK Universitas Indonesia';
@@ -360,7 +380,7 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
                                 const Icon(Icons.star_rounded, color: Color(0xFFFBBF24), size: 15),
                                 const SizedBox(width: 4),
                                 Text(
-                                  '$rating ($reviews reviews)',
+                                  '$displayRating ($displayReviews reviews)',
                                   style: GoogleFonts.plusJakartaSans(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.w700,
@@ -459,7 +479,7 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
                           _buildExperienceTab(primaryTeal),
 
                           // Tab 4: Reviews
-                          _buildReviewsTab(rating, reviews),
+                          _buildReviewsTab(displayRating, displayReviews),
                         ],
                       ),
                     ),
@@ -1026,7 +1046,11 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
   }
 
   Widget _buildReviewsTab(String rating, String totalReviews) {
-    final List<Map<String, String>> reviews = [
+    if (_isLoadingReviews) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFF006D77)));
+    }
+
+    final List<Map<String, String>> fallbackReviews = [
       {
         'user': 'Salsabila R.',
         'rating': '5.0',
@@ -1041,53 +1065,124 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
       },
     ];
 
+    final List<Map<String, String>> displayList = _liveReviews.isNotEmpty
+        ? _liveReviews.map((r) {
+            final rawDate = r['created_at']?.toString() ?? '';
+            String formattedDate = 'Baru saja';
+            if (rawDate.isNotEmpty) {
+              try {
+                final dt = DateTime.parse(rawDate).toLocal();
+                formattedDate = '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+              } catch (_) {}
+            }
+            return {
+              'user': (r['user_name'] ?? 'Pasien').toString(),
+              'rating': ((r['rating'] as num?)?.toDouble() ?? 5.0).toStringAsFixed(1),
+              'date': formattedDate,
+              'comment': (r['comment'] ?? '').toString().isNotEmpty ? r['comment'].toString() : 'Konsultasi sangat memuaskan.',
+            };
+          }).toList()
+        : fallbackReviews;
+
     return ListView(
       padding: const EdgeInsets.all(18),
-      children: reviews.map((r) {
-        return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(12),
+      children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFF1F5F9)),
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    r['user']!,
-                    style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                  ),
-                  Row(
-                    children: [
-                      const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
-                      const SizedBox(width: 2),
-                      Text(
-                        r['rating']!,
-                        style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
+              Text(
+                rating,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: List.generate(5, (index) {
+                        return const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 18);
+                      }),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Berdasarkan $totalReviews ulasan pasien',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF64748B),
                       ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                r['date']!,
-                style: GoogleFonts.plusJakartaSans(fontSize: 9.5, color: const Color(0xFF94A3B8)),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                r['comment']!,
-                style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF475569), height: 1.35),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-        );
-      }).toList(),
+        ),
+        ...displayList.map((r) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFF1F5F9)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0F172A).withValues(alpha: 0.02),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      r['user']!,
+                      style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                    ),
+                    Row(
+                      children: [
+                        const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
+                        const SizedBox(width: 2),
+                        Text(
+                          r['rating']!,
+                          style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  r['date']!,
+                  style: GoogleFonts.plusJakartaSans(fontSize: 9.5, color: const Color(0xFF94A3B8)),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  r['comment']!,
+                  style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF475569), height: 1.35),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
     );
   }
 

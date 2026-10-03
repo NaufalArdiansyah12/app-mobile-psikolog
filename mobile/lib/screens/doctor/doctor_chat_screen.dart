@@ -220,6 +220,8 @@ class _DoctorChatScreenState extends State<DoctorChatScreen> {
                   ),
                   Text(
                     'Pasien ${widget.patientAge ?? "Umum"} • Sesi Berlangsung',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 11,
                       color: AppColors.primary,

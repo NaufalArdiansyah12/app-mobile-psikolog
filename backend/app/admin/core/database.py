@@ -100,7 +100,27 @@ def _seed_default_data():
             db.add(doctor_profile)
             db.commit()
 
-        # 3. Kategori Laporan Default
+        # 3. Akun Pengguna Biasa Default jika belum ada
+        sample_users = [
+            ("Rian Pratama", "rian@mindpal.id", "081233445566", "user", "active"),
+            ("Siti Nurhaliza", "siti@mindpal.id", "085677889900", "user", "active"),
+            ("Budi Santoso", "budi@mindpal.id", "087811223344", "user", "inactive"),
+        ]
+        for u_name, u_email, u_phone, u_role, u_status in sample_users:
+            if not db.query(User).filter(User.email == u_email).first():
+                db.add(
+                    User(
+                        name=u_name,
+                        email=u_email,
+                        password=hash_password("password123"),
+                        role=u_role,
+                        status=u_status,
+                        phone=u_phone,
+                    )
+                )
+        db.commit()
+
+        # 4. Kategori Laporan Default
         categories = [
             ("Pelanggaran Etika", "Tindakan atau ucapan tidak pantas saat sesi konsultasi"),
             ("Keterlambatan/Tidak Hadir", "Dokter tidak hadir sesuai jadwal tanpa konfirmasi"),

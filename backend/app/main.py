@@ -31,9 +31,9 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="MindPal Backend & Admin API",
+        title="Havenly Backend & Admin API",
         version="2.0.0",
-        description="Unified Clean Architecture Backend: MindPal Mobile + Admin Panel",
+        description="Unified Clean Architecture Backend: Havenly Mobile + Admin Panel",
         lifespan=lifespan,
     )
 

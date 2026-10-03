@@ -6,11 +6,21 @@ from sqlalchemy.orm import Session
 
 from app.admin.core.database import get_admin_db
 from app.admin.core.security import require_admin
-from app.admin.schemas.doctor import DoctorRejectRequest
+from app.admin.schemas.doctor import DoctorCreateRequest, DoctorRejectRequest
 from app.admin.services import doctor_service
 from app.admin.utils import PaginationParams, ok, ok_list
 
 router = APIRouter(prefix="/doctors", tags=["Admin Doctors"])
+
+
+@router.post("", status_code=201)
+def create_doctor(
+    payload: DoctorCreateRequest,
+    admin=Depends(require_admin),
+    db: Session = Depends(get_admin_db),
+) -> Dict[str, Any]:
+    data = doctor_service.create_doctor(db, admin.id, payload)
+    return ok("Dokter berhasil ditambahkan beserta akun login", data)
 
 
 @router.get("")

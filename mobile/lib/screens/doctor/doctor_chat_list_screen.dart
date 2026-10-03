@@ -83,7 +83,7 @@ class _DoctorChatListScreenState extends State<DoctorChatListScreen> {
                     separatorBuilder: (_, __) => const Divider(height: 1, indent: 76, color: AppColors.borderLight),
                     itemBuilder: (context, index) {
                       final item = _chatRooms[index];
-                      final patientName = item['patient_name'] ?? 'Pasien MindPal';
+                      final patientName = item['patient_name'] ?? 'Pasien Hevenly';
                       final time = item['schedule_time'] ?? 'Hari ini';
                       final notes = item['notes'] ?? 'Keluhan konsultasi';
                       final isCompleted = item['status'] == 'completed';

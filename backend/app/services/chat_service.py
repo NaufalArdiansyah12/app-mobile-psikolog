@@ -125,7 +125,7 @@ async def analyze_chat_session(messages: List[ChatMessage]) -> ChatAnalysisResul
             distress_level=str(data.get("distress_level", "Sedang")),
             dominant_emotions=list(data.get("dominant_emotions", ["Cemas"])),
             cognitive_distortions=list(data.get("cognitive_distortions", [])),
-            summary=str(data.get("summary", "Sesi curhat MindPal.")),
+            summary=str(data.get("summary", "Sesi curhat Havenly.")),
             cbt_insights=str(data.get("cbt_insights", "Refleksi pola pikir.")),
             action_recommendations=list(data.get("action_recommendations", ["Istirahat sejenak"]))
         )

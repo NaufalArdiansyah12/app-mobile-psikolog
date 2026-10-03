@@ -35,7 +35,7 @@ class MidtransService:
         gross_amount: int,
         payment_type: str = "bank_transfer",
         bank: str = "bca",
-        customer_name: str = "Pasien MindPal",
+        customer_name: str = "Pasien Havenly",
         customer_email: str = "pasien@mindpal.id"
     ) -> Dict[str, Any]:
         """Request charge ke Midtrans Core API (dengan fallback sandbox generator jika key kosong)."""
@@ -61,7 +61,7 @@ class MidtransService:
         elif bank_clean == "mandiri":
             payload["payment_type"] = "echannel"
             payload["echannel"] = {
-                "bill_info1": "Konseling MindPal",
+                "bill_info1": "Konseling Havenly",
                 "bill_info2": "Sesi Spesialis"
             }
         else: # bca, bni, bri, permata
@@ -223,7 +223,7 @@ class MidtransService:
                         pay_data = urllib.parse.urlencode({
                             "company_code": c_code.group(1) if c_code else "16355",
                             "customer_number": c_num.group(1) if c_num else va_num,
-                            "customer_name": c_name.group(1) if c_name else "Pasien MindPal",
+                            "customer_name": c_name.group(1) if c_name else "Pasien Havenly",
                             "currency_code": "IDR",
                             "total_amount": gross_amt
                         }).encode("utf-8")
@@ -239,7 +239,7 @@ class MidtransService:
                 elif bank in ("bri", "permata", "cimb"):
                     pay_data = urllib.parse.urlencode({
                         "bank": bank.upper(),
-                        "virtualAccountName": "Pasien MindPal",
+                        "virtualAccountName": "Pasien Havenly",
                         "vaNumber": va_num,
                         "amount": gross_amt
                     }).encode("utf-8")

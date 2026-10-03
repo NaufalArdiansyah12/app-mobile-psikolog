@@ -251,7 +251,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 Icon(Icons.auto_awesome, color: Color(0xFFD97706), size: 14),
                 SizedBox(width: 4),
                 Text(
-                  "MindPal AI",
+                  "Hevenly AI",
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,

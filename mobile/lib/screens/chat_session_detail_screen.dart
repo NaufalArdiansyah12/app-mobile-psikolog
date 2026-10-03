@@ -456,7 +456,7 @@ class _ChatSessionDetailScreenState extends State<ChatSessionDetailScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              analysis.summary.isNotEmpty ? analysis.summary : "Percakapan curhat santai dengan MindPal.",
+                              analysis.summary.isNotEmpty ? analysis.summary : "Percakapan curhat santai dengan Hevenly.",
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 13,
                                 height: 1.45,
@@ -624,7 +624,7 @@ class _ChatSessionDetailScreenState extends State<ChatSessionDetailScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    isUser ? "Kamu" : "MindPal AI",
+                                    isUser ? "Kamu" : "Hevenly AI",
                                     style: GoogleFonts.plusJakartaSans(
                                       fontSize: 10.5,
                                       fontWeight: FontWeight.w800,

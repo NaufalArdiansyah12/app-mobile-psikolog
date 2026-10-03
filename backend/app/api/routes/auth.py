@@ -3,7 +3,7 @@ from typing import Dict
 from fastapi import APIRouter, HTTPException, status
 from app.core.database import get_supabase
 from app.core.config import SUPABASE_URL, SUPABASE_KEY
-from app.models.schemas import RegisterRequest, LoginRequest, AuthResponse
+from app.models.schemas import RegisterRequest, LoginRequest, ChangePasswordRequest, AuthResponse
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -262,4 +262,86 @@ def login(req: LoginRequest):
         psychologist_id=user_data.get("psychologist_id"),
         token=f"mock_token_{user_data['id']}",
         message="Berhasil masuk (mode dev)."
+    )
+
+@router.post("/change-password")
+def change_password(req: ChangePasswordRequest):
+    email = req.email.strip().lower()
+    old_password = req.old_password.strip()
+    new_password = req.new_password.strip()
+
+    if not email or not old_password or not new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email, password saat ini, dan password baru wajib diisi."
+        )
+
+    if len(new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password baru minimal 6 karakter."
+        )
+
+    admin_sp = get_supabase()
+
+    if admin_sp:
+        user_client = _create_temp_auth_client()
+        if user_client:
+            # 1. Verifikasi kredensial password lama
+            try:
+                login_res = user_client.auth.sign_in_with_password({
+                    "email": email,
+                    "password": old_password
+                })
+                if not login_res.user:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Password saat ini tidak cocok."
+                    )
+                user_id = login_res.user.id
+
+                # 2. Update password via Supabase Admin API
+                admin_sp.auth.admin.update_user_by_id(
+                    user_id,
+                    {"password": new_password}
+                )
+
+                # Sync ke in-memory jika ada
+                if email in _inmemory_users:
+                    _inmemory_users[email]["password"] = new_password
+
+                return {
+                    "status": "success",
+                    "message": "Password berhasil diperbarui."
+                }
+            except HTTPException:
+                raise
+            except Exception as e:
+                err_msg = str(e).lower()
+                if "invalid login credentials" in err_msg or "invalid_grant" in err_msg:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Password saat ini tidak cocok."
+                    )
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Gagal memperbarui password: {e}"
+                )
+
+    # Fallback in-memory
+    if email in _inmemory_users:
+        if _inmemory_users[email]["password"] != old_password:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Password saat ini tidak cocok."
+            )
+        _inmemory_users[email]["password"] = new_password
+        return {
+            "status": "success",
+            "message": "Password berhasil diperbarui (mode dev)."
+        }
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Akun tidak ditemukan."
     )

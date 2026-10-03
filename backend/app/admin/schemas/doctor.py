@@ -36,5 +36,19 @@ class DoctorOut(BaseModel):
     documents: List[DoctorDocumentOut] = Field(default_factory=list)
 
 
+class DoctorCreateRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=120, description="Nama lengkap dokter dan gelar")
+    email: str = Field(..., description="Email untuk login akun dokter")
+    password: str = Field(..., min_length=6, description="Kata sandi akun dokter")
+    phone: Optional[str] = Field(None, max_length=30, description="Nomor kontak/WhatsApp")
+    specialization: str = Field("Psikolog Klinis", description="Spesialisasi dokter/psikolog")
+    license_number: Optional[str] = Field(None, description="Nomor STR / SIP")
+    education: Optional[str] = Field(None, description="Latar belakang pendidikan")
+    experience: Optional[str] = Field(None, description="Lama pengalaman praktek")
+    bio: Optional[str] = Field(None, description="Deskripsi singkat bio & keahlian")
+    verification_status: str = Field("approved", description="Status verifikasi awal: approved | pending")
+    is_active: bool = Field(True, description="Status keaktifan akun")
+
+
 class DoctorRejectRequest(BaseModel):
     reason: str = Field(..., min_length=5, description="Alasan penolakan")

@@ -10,11 +10,11 @@ class StorageService {
   static const String _keyDoctorId = 'mindpal_doctor_id';
   static const String _keyAuthToken = 'mindpal_auth_token';
   static const String _keyIsLoggedIn = 'mindpal_is_logged_in';
-  static const String _keyNickname = 'mindpal_user_nickname';
-  static const String _keyPin = 'mindpal_security_pin';
-  static const String _keyMoods = 'mindpal_local_moods';
-  static const String _keyChatSessions = 'mindpal_chat_sessions';
-  static const String _keyLastCheckinDate = 'mindpal_last_mood_checkin_date';
+  static const String _keyNickname = 'havenly_user_nickname';
+  static const String _keyPin = 'havenly_security_pin';
+  static const String _keyMoods = 'havenly_local_moods';
+  static const String _keyChatSessions = 'havenly_chat_sessions';
+  static const String _keyLastCheckinDate = 'havenly_last_mood_checkin_date';
 
   static final StorageService _instance = StorageService._internal();
   factory StorageService() => _instance;
@@ -100,7 +100,7 @@ class StorageService {
   // FR-02: Nickname
   Future<String> getNickname() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyNickname) ?? 'Sobat MindPal';
+    return prefs.getString(_keyNickname) ?? prefs.getString('mindpal_user_nickname') ?? 'Sobat Hevenly';
   }
 
   Future<void> setNickname(String name) async {
@@ -134,7 +134,7 @@ class StorageService {
 
   Future<String> getUserBio() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyUserBio) ?? 'Member MindPal • Mental Health';
+    return prefs.getString(_keyUserBio) ?? 'Member Hevenly • Mental Health';
   }
 
   Future<void> setUserBio(String bio) async {
@@ -375,7 +375,21 @@ class StorageService {
     } catch (_) {}
   }
 
-  // Booked Schedules Persistensi Lokal
+  Future<bool> hasReviewedBooking(String bookingId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('havenly_reviewed_$bookingId') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> setReviewedBooking(String bookingId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('havenly_reviewed_$bookingId', true);
+    } catch (_) {}
+  }
   static const String _keyBookedSchedules = 'mindpal_booked_schedules_';
 
   Future<void> addBookedSchedule(String psychologistId, String schedule) async {

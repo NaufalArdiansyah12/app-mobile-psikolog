@@ -98,6 +98,18 @@ create index if not exists idx_chat_messages_session on chat_messages(session_id
 create index if not exists idx_mood_logs_user on mood_logs(user_id);
 create index if not exists idx_bookings_user on bookings(user_id);
 
+create table if not exists doctor_reviews (
+    id uuid primary key default uuid_generate_v4(),
+    booking_id uuid references bookings(id) on delete set null,
+    psychologist_id uuid references psychologists(id) on delete cascade not null,
+    user_name text default 'Pasien',
+    rating int not null check (rating between 1 and 5),
+    comment text,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_doctor_reviews_psy on doctor_reviews(psychologist_id, created_at);
+
 -- Dummy data psikolog awal
 insert into psychologists (name, role, experience, rating, price, category, hospital, is_available)
 values

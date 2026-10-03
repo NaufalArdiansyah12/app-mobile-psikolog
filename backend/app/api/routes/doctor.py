@@ -93,6 +93,16 @@ def get_doctor_dashboard(doctor_id: str):
                     if st in ("confirmed", "pending"):
                         today_sessions += 1
 
+            # 3. Hitung rating riil dari tabel doctor_reviews jika ada
+            try:
+                rev_res = sp.table("doctor_reviews").select("rating").ilike("psychologist_id", f"%{doctor_id}%").execute()
+                if not rev_res.data and doctor_id:
+                    rev_res = sp.table("doctor_reviews").select("rating").execute()
+                if rev_res.data:
+                    rating = round(sum(float(r["rating"]) for r in rev_res.data) / len(rev_res.data), 1)
+            except Exception:
+                pass
+
         except Exception as e:
             print(f"Error query doctor dashboard from Supabase: {e}")
 

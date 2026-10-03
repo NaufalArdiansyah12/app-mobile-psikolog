@@ -5,9 +5,9 @@
 Monorepo:
 
 ```
-backend/              ← FastAPI (Python) terpadu: Mobile API + Admin Panel API
-mobile/               ← Flutter (Dart) cross-platform Android/iOS client
-adminpanel/frontend/  ← Next.js 15 (React 19) Dashboard Web Admin
+backend/     ← FastAPI (Python) terpadu: Mobile API + Admin Panel API
+mobile/      ← Flutter (Dart) cross-platform Android/iOS client
+adminpanel/  ← Next.js 15 (React 19) Dashboard Web Admin
 ```
 
 ## Backend (FastAPI)

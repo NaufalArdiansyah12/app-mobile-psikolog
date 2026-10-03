@@ -49,12 +49,14 @@ dev_dependencies:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/logo.jpg"
+  image_path: "assets/logo-2.jpeg"
   min_sdk_android: 21
 
 flutter:
   uses-material-design: true
   assets:
+    - assets/logo-2.jpeg
+    - assets/logo-v2.jpeg
     - assets/logo.jpg
     - assets/illustrations/
     - assets/gambar_home.jpeg

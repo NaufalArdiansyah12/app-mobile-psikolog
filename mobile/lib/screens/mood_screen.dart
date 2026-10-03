@@ -170,7 +170,7 @@ class MoodScreenState extends State<MoodScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              "Setiap kali kamu curhat dengan MindPal AI, tekan ikon bookmark atau selesaikan sesi untuk mengarsipkan obrolan dan melihat statistik keparahan emosimu di sini.",
+              "Setiap kali kamu curhat dengan Hevenly AI, tekan ikon bookmark atau selesaikan sesi untuk mengarsipkan obrolan dan melihat statistik keparahan emosimu di sini.",
               textAlign: TextAlign.center,
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 13,

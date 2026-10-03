@@ -300,7 +300,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 const Icon(Icons.auto_awesome, color: Color(0xFFD97706), size: 14),
                 const SizedBox(width: 5),
                 Text(
-                  "MindPal AI",
+                  "Hevenly AI",
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w800,

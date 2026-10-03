@@ -40,7 +40,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final savedName = await _storage.getNickname();
-    if (savedName.isNotEmpty && savedName != 'Sobat MindPal') {
+    if (savedName.isNotEmpty && savedName != 'Sobat Hevenly' && savedName != 'Sobat Havenly' && savedName != 'Sobat MindPal') {
       _doctorName = savedName;
     }
 
@@ -131,7 +131,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Portal Dokter MindPal',
+                                'Portal Dokter Hevenly',
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
@@ -865,7 +865,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
 
     return Column(
       children: _todayBookings.map((b) {
-        final patientName = b['patient_name'] ?? 'Pasien MindPal';
+        final patientName = b['patient_name'] ?? 'Pasien Hevenly';
         final time = b['schedule_time'] ?? 'Hari ini, 19:00';
         final notes = b['notes'] ?? 'Keluhan kecemasan dan stres harian.';
         final status = b['status'] ?? 'confirmed';
@@ -895,60 +895,70 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(0xFFCCFBF1),
-                            border: Border.all(color: const Color(0xFF99F6E4), width: 1),
-                          ),
-                          child: Center(
-                            child: Text(
-                              patientName.isNotEmpty ? patientName[0].toUpperCase() : 'P',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.primaryDark,
-                                fontSize: 15,
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0xFFCCFBF1),
+                              border: Border.all(color: const Color(0xFF99F6E4), width: 1),
+                            ),
+                            child: Center(
+                              child: Text(
+                                patientName.isNotEmpty ? patientName[0].toUpperCase() : 'P',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.primaryDark,
+                                  fontSize: 15,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              patientName,
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.dark,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Row(
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.access_time_rounded, size: 12, color: AppColors.primary),
-                                const SizedBox(width: 4),
                                 Text(
-                                  time,
+                                  patientName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11.5,
-                                    color: AppColors.primaryDark,
-                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.dark,
                                   ),
+                                ),
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.access_time_rounded, size: 12, color: AppColors.primary),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        time,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 11.5,
+                                          color: AppColors.primaryDark,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                       decoration: BoxDecoration(
@@ -1187,7 +1197,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Panduan Praktik MindPal',
+                  'Panduan Praktik Hevenly',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,

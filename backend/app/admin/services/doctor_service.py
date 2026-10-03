@@ -164,3 +164,54 @@ def set_doctor_active(
     db.commit()
     db.refresh(doctor)
     return get_doctor(db, doctor_id)
+
+
+def create_doctor(
+    db: Session, admin_id: int, payload: Any
+) -> Dict[str, Any]:
+    from app.admin.core.security import hash_password
+
+    email_clean = payload.email.strip().lower()
+    existing = db.query(User).filter(User.email == email_clean).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email sudah terdaftar di sistem")
+
+    # 1. Buat User role doctor
+    user = User(
+        name=payload.name.strip(),
+        email=email_clean,
+        password=hash_password(payload.password),
+        phone=payload.phone.strip() if payload.phone else None,
+        role="doctor",
+        status="active" if payload.is_active else "inactive",
+    )
+    db.add(user)
+    db.flush()
+
+    # 2. Buat Profil Dokter
+    verified_at = datetime.utcnow() if payload.verification_status == "approved" else None
+    doctor = Doctor(
+        user_id=user.id,
+        specialization=payload.specialization.strip() if payload.specialization else "Psikolog Klinis",
+        license_number=payload.license_number.strip() if payload.license_number else None,
+        education=payload.education.strip() if payload.education else None,
+        experience=payload.experience.strip() if payload.experience else None,
+        bio=payload.bio.strip() if payload.bio else None,
+        verification_status=payload.verification_status,
+        verified_at=verified_at,
+        is_active=payload.is_active,
+    )
+    db.add(doctor)
+    db.flush()
+
+    log_admin_activity(
+        db,
+        admin_id,
+        "create_doctor",
+        "doctor",
+        doctor.id,
+        f"Menambahkan dokter baru {user.name} ({user.email})",
+    )
+    db.commit()
+    return get_doctor(db, doctor.id)
+

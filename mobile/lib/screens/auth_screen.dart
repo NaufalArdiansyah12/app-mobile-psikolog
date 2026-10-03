@@ -166,7 +166,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 isDoctor
                     ? "Portal tenaga ahli siap digunakan untuk mengelola antrean dan sesi konsultasi pasien."
                     : (_isLogin
-                        ? "Berhasil masuk ke MindPal. Data obrolan dan jurnalmu siap digunakan."
+                        ? "Berhasil masuk ke Hevenly. Data obrolan dan jurnalmu siap digunakan."
                         : "Akunmu berhasil didaftarkan dan tersimpan aman di database."),
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 12.5,
@@ -266,7 +266,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      "MindPal",
+                      "Hevenly",
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 24,
                         fontWeight: FontWeight.w800,
@@ -586,7 +586,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           ),
                         )
                       : Text(
-                          _isLogin ? "MASUK KE MINDPAL" : "BUAT AKUN BARU",
+                          _isLogin ? "MASUK KE HEVENLY" : "BUAT AKUN BARU",
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 14,
                             fontWeight: FontWeight.w800,

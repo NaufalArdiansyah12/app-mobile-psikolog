@@ -77,6 +77,7 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
       _pollNewMessages();
       if (mounted) setState(() {});
     });
+    _checkAndShowRatingModal();
   }
 
   DoctorChatSessionInfo _getChatSessionInfo() {
@@ -202,6 +203,212 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
         icon: Icons.chat_bubble_rounded,
       );
     }
+  }
+
+  void _checkAndShowRatingModal() async {
+    final sessionInfo = _getChatSessionInfo();
+    if (sessionInfo.status != DoctorChatSessionStatus.expired) return;
+
+    final hasReviewed = await _storage.hasReviewedBooking(widget.bookingId);
+    if (hasReviewed || !mounted) return;
+
+    // Tunggu sedikit agar chat terbuka dulu dengan halus
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) {
+        _showRatingBottomSheet();
+      }
+    });
+  }
+
+  void _showRatingBottomSheet() {
+    int selectedRating = 5;
+    final commentCtrl = TextEditingController();
+    bool isSubmitting = false;
+    final docName = widget.doctor['name'] ?? 'Dokter Spesialis';
+    final docId = widget.doctor['id']?.toString() ?? 'psy_1';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (modalCtx, setModalState) {
+          return Container(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 24,
+              top: 16,
+              left: 24,
+              right: 24,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(Icons.star_rounded, color: Color(0xFFD97706), size: 30),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Bagaimana Sesi Konsultasi Anda?',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Beri ulasan dan rating untuk $docName untuk meningkatkan kualitas pelayanan.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Bintang Rating
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (index) {
+                      final starIndex = index + 1;
+                      return IconButton(
+                        iconSize: 34,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        icon: Icon(
+                          starIndex <= selectedRating ? Icons.star_rounded : Icons.star_outline_rounded,
+                          color: starIndex <= selectedRating ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
+                        ),
+                        onPressed: () {
+                          setModalState(() => selectedRating = starIndex);
+                        },
+                      );
+                    }),
+                  ),
+                  Text(
+                    selectedRating == 5
+                        ? 'Sangat Membantu & Memuaskan ⭐⭐⭐⭐⭐'
+                        : selectedRating == 4
+                            ? 'Bagus & Bermanfaat ⭐⭐⭐⭐'
+                            : selectedRating == 3
+                                ? 'Cukup Baik ⭐⭐⭐'
+                                : 'Perlu Peningkatan ⭐',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFFD97706),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Feedback text
+                  TextField(
+                    controller: commentCtrl,
+                    maxLines: 3,
+                    style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: 'Tuliskan pengalaman atau pesan kesan Anda...',
+                      hintStyle: GoogleFonts.plusJakartaSans(color: const Color(0xFF94A3B8), fontSize: 12.5),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      contentPadding: const EdgeInsets.all(14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFF0D9488), width: 1.5),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Tombol Kirim
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0D9488),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                      ),
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              setModalState(() => isSubmitting = true);
+                              final success = await _apiService.submitDoctorReview(
+                                bookingId: widget.bookingId,
+                                psychologistId: docId,
+                                rating: selectedRating,
+                                comment: commentCtrl.text.trim(),
+                                userName: _userName,
+                                userId: _userUuid,
+                              );
+                              setModalState(() => isSubmitting = false);
+                              if (success) {
+                                await _storage.setReviewedBooking(widget.bookingId);
+                                if (modalCtx.mounted) Navigator.pop(modalCtx);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Terima kasih! Rating & ulasan Anda berhasil disimpan.',
+                                        style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+                                      ),
+                                      backgroundColor: const Color(0xFF0D9488),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                      child: isSubmitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : Text(
+                              'Kirim Ulasan',
+                              style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w800),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   void _initChat() async {
@@ -359,6 +566,8 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
                 children: [
                   Text(
                     docName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w800,
@@ -376,12 +585,16 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Text(
-                        '$docRole • ${sessionInfo.badgeText}',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: sessionInfo.themeColor,
+                      Expanded(
+                        child: Text(
+                          '$docRole • ${sessionInfo.badgeText}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: sessionInfo.themeColor,
+                          ),
                         ),
                       ),
                     ],
@@ -392,6 +605,12 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
           ],
         ),
         actions: [
+          if (sessionInfo.status == DoctorChatSessionStatus.expired)
+            IconButton(
+              icon: const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 24),
+              tooltip: 'Beri Rating Dokter',
+              onPressed: _showRatingBottomSheet,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Color(0xFF64748B), size: 22),
             tooltip: 'Perbarui Pesan',
@@ -404,7 +623,7 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
           // Banner Status Jadwal Konsultasi Dinamis
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: sessionInfo.bgColor,
               border: Border(
@@ -412,9 +631,13 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
               ),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(sessionInfo.icon, color: sessionInfo.themeColor, size: 20),
-                const SizedBox(width: 10),
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(sessionInfo.icon, color: sessionInfo.themeColor, size: 20),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -422,6 +645,8 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
                     children: [
                       Text(
                         sessionInfo.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w800,
@@ -441,9 +666,9 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
                     ],
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
                   decoration: BoxDecoration(
                     color: sessionInfo.themeColor,
                     borderRadius: BorderRadius.circular(6),
@@ -454,7 +679,7 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
                       fontSize: 9,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
-                      letterSpacing: 0.5,
+                      letterSpacing: 0.3,
                     ),
                   ),
                 ),
@@ -690,14 +915,16 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
                       children: [
                         Row(
                           children: [
-                            Text(
-                              sessionInfo.status == DoctorChatSessionStatus.upcoming
-                                  ? 'Ruang Chat Digembok'
-                                  : 'Ruang Chat Digembok',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                                color: sessionInfo.themeColor,
+                            Flexible(
+                              child: Text(
+                                'Ruang Chat Digembok',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: sessionInfo.themeColor,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 6),

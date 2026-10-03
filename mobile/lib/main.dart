@@ -39,13 +39,13 @@ void main() async {
     initialScreen = const LaunchSplashScreen();
   }
 
-  runApp(MindPalApp(initialScreen: initialScreen));
+  runApp(HevenlyApp(initialScreen: initialScreen));
 }
 
-class MindPalApp extends StatelessWidget {
+class HevenlyApp extends StatelessWidget {
   final Widget initialScreen;
 
-  const MindPalApp({
+  const HevenlyApp({
     super.key,
     required this.initialScreen,
   });
@@ -53,7 +53,7 @@ class MindPalApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MindPal',
+      title: 'Hevenly',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: initialScreen,
@@ -77,7 +77,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late final List<Widget> _screens = [
     HomeScreen(key: _homeKey),    // Tab 1: Beranda
     MoodScreen(key: _moodKey),    // Tab 2: Jurnal & Mood
-    ChatScreen(key: _chatKey),    // Tab 3: MindPal AI (Tengah)
+    ChatScreen(key: _chatKey),    // Tab 3: Hevenly AI (Tengah)
     const ConsultationScreen(),   // Tab 4: Konsultasi (Ahli)
     const SettingsScreen(),       // Tab 5: Profil
   ];
@@ -245,7 +245,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
           const SizedBox(height: 2),
           Text(
-            "MindPal AI",
+            "Hevenly AI",
             style: GoogleFonts.plusJakartaSans(
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
@@ -686,83 +686,6 @@ class HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                             ],
-                          ),
-                        ],
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // SOS Quick Button
-                          InkWell(
-                            onTap: () => CrisisModalOverlay.show(context),
-                            borderRadius: BorderRadius.circular(20),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.08),
-                                    blurRadius: 6,
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.sos_rounded, color: Color(0xFFE11D48), size: 15),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'SOS',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      color: const Color(0xFFE11D48),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-
-                          // Notification Bell
-                          InkWell(
-                            onTap: () => NotificationPanel.show(context),
-                            borderRadius: BorderRadius.circular(20),
-                            child: Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.2),
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 1.2),
-                              ),
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  const Icon(
-                                    Icons.notifications_none_rounded,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                  Positioned(
-                                    top: 7,
-                                    right: 7,
-                                    child: Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFEF4444),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 1.5),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                           ),
                         ],
                       ),

@@ -48,6 +48,11 @@ class LoginRequest(BaseModel):
     password: str
     role: Optional[str] = None
 
+class ChangePasswordRequest(BaseModel):
+    email: str
+    old_password: str
+    new_password: str
+
 class AuthResponse(BaseModel):
     status: str
     user_id: str
@@ -87,6 +92,14 @@ class ChargeRequest(BaseModel):
     bank: Optional[str] = "bca" # bca, bni, bri, mandiri
     gross_amount: int = 250000
     notes: Optional[str] = None
+
+class DoctorReviewRequest(BaseModel):
+    booking_id: str
+    psychologist_id: str
+    user_id: Optional[str] = None
+    rating: int = Field(..., ge=1, le=5)
+    comment: Optional[str] = None
+    user_name: Optional[str] = "Pasien"
 
 class DoctorMessageRequest(BaseModel):
     booking_id: str
