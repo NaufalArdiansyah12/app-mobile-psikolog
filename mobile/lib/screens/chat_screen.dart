@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -775,7 +776,7 @@ class ChatScreenState extends State<ChatScreen> {
             ),
           ),
 
-          // Suggested Chips
+          // Suggested Chips (Liquid Glass effect)
           if (_suggestedChips.isNotEmpty)
             Container(
               height: 40,
@@ -788,39 +789,52 @@ class ChatScreenState extends State<ChatScreen> {
                   final chip = _suggestedChips[idx];
                   return Padding(
                     padding: const EdgeInsets.only(right: 8.0),
-                    child: InkWell(
-                      onTap: () {
-                        if (chip.toLowerCase().contains("napas")) {
-                          _showBreathingModal();
-                        } else if (chip.toLowerCase().contains("grounding")) {
-                          _showGroundingModal();
-                        } else if (chip.toLowerCase().contains("119")) {
-                          CrisisModalOverlay.show(context);
-                        } else {
-                          _sendMessage(chip);
-                        }
-                      },
-                      borderRadius: BorderRadius.circular(16),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFE9D5FF)),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.02),
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                        child: Center(
-                          child: Text(
-                            chip,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF7E22CE),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              if (chip.toLowerCase().contains("napas")) {
+                                _showBreathingModal();
+                              } else if (chip.toLowerCase().contains("grounding")) {
+                                _showGroundingModal();
+                              } else if (chip.toLowerCase().contains("119")) {
+                                CrisisModalOverlay.show(context);
+                              } else {
+                                _sendMessage(chip);
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.72),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  width: 1.2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF0D9488).withValues(alpha: 0.08),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Center(
+                                child: Text(
+                                  chip,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0F766E),
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),

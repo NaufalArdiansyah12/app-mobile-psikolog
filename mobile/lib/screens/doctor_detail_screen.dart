@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
@@ -23,10 +24,12 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
   bool _isLoadingSchedules = true;
   List<Map<String, dynamic>> _liveReviews = [];
   bool _isLoadingReviews = true;
-  double _liveRating = 5.0;
+  double? _liveRating;
   int _totalReviewCount = 0;
 
-  final List<String> _timeSlots = [
+  final List<String> _timeSlots = [];
+
+  final List<String> _defaultFallbackSlots = [
     '09:00 - 11:00 WIB',
     '11:00 - 13:00 WIB',
     '13:00 - 15:00 WIB',
@@ -53,20 +56,96 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
 
   final List<String> _weekDayHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+  static const Map<int, String> _weekdayMap = {
+    1: 'Senin',
+    2: 'Selasa',
+    3: 'Rabu',
+    4: 'Kamis',
+    5: 'Jumat',
+    6: 'Sabtu',
+    7: 'Minggu',
+  };
+
+  List<String> get _doctorAvailableDays {
+    final raw = widget.doctor['available_days'] ?? widget.doctor['days'];
+    if (raw is List && raw.isNotEmpty) {
+      return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    } else if (raw is String && raw.trim().startsWith('[')) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          return decoded.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+        }
+      } catch (_) {}
+    }
+    return [];
+  }
+
+  List<String> _extractDoctorSlots() {
+    final raw = widget.doctor['available_slots'] ?? widget.doctor['slots'];
+    List<String> result = [];
+    if (raw is List && raw.isNotEmpty) {
+      result = raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    } else if (raw is String && raw.trim().startsWith('[')) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          result = decoded.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+        }
+      } catch (_) {}
+    }
+
+    if (result.isNotEmpty) {
+      return result.map((s) {
+        if (!s.toUpperCase().contains('WIB')) {
+          return '$s WIB';
+        }
+        return s;
+      }).toList();
+    }
+
+    // Jika dokter belum pernah setting sama sekali, fallback default
+    return List<String>.from(_defaultFallbackSlots);
+  }
+
+  bool _isDoctorPracticeDay(DateTime date) {
+    final days = _doctorAvailableDays;
+    if (days.isEmpty) return true; // Jika dokter belum mengatur, default terbuka
+    final dayName = _weekdayMap[date.weekday];
+    return days.any((d) => d.toLowerCase() == dayName?.toLowerCase());
+  }
+
+  DateTime _findFirstAvailableDate(DateTime fromDate) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    DateTime current = fromDate.isBefore(today) ? today : fromDate;
+
+    // Cari sampai 60 hari ke depan
+    for (int i = 0; i < 60; i++) {
+      final testDate = current.add(Duration(days: i));
+      if (_isDoctorPracticeDay(testDate) && !_isDayFull(testDate)) {
+        return testDate;
+      }
+    }
+    return current;
+  }
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     final now = DateTime.now();
     _currentMonth = DateTime(now.year, now.month, 1);
-    _selectedDate = now;
 
-    final docSlots = widget.doctor['available_slots'];
-    if (docSlots != null && docSlots is List && docSlots.isNotEmpty) {
-      _timeSlots.clear();
-      _timeSlots.addAll(List<String>.from(docSlots));
+    // Muat hanya slot yang diatur oleh dokter
+    final parsedSlots = _extractDoctorSlots();
+    _timeSlots.clear();
+    _timeSlots.addAll(parsedSlots);
+    if (_timeSlots.isNotEmpty) {
       _selectedTime = _timeSlots.first;
     }
+
+    _selectedDate = _findFirstAvailableDate(now);
 
     _loadBookedSchedules();
     _loadReviews();
@@ -78,7 +157,7 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
     if (!mounted) return;
     setState(() {
       _isLoadingReviews = false;
-      _liveRating = (res['rating'] as num?)?.toDouble() ?? 5.0;
+      _liveRating = (res['rating'] as num?)?.toDouble();
       _totalReviewCount = (res['total_reviews'] as int?) ?? 0;
       final rawList = res['reviews'];
       if (rawList is List) {
@@ -94,17 +173,9 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
     setState(() {
       _bookedSchedules = schedules;
       _isLoadingSchedules = false;
-      // Jika tanggal default ternyata full, cari tanggal terdekat yang masih tersedia
-      if (_isDayFull(_selectedDate)) {
-        final daysInMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 0).day;
-        for (int d = 1; d <= daysInMonth; d++) {
-          final testDate = DateTime(_currentMonth.year, _currentMonth.month, d);
-          final isPast = testDate.isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day));
-          if (!isPast && !_isDayFull(testDate)) {
-            _selectedDate = testDate;
-            break;
-          }
-        }
+      // Pastikan tanggal default valid (hari praktik & belum full)
+      if (!_isDoctorPracticeDay(_selectedDate) || _isDayFull(_selectedDate)) {
+        _selectedDate = _findFirstAvailableDate(DateTime.now());
       }
       // Jika default time slot ternyata booked, geser ke slot pertama yang kosong
       if (_isSlotBooked(_selectedDate, _selectedTime)) {
@@ -258,17 +329,39 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
   @override
   Widget build(BuildContext context) {
     final doc = widget.doctor;
-    final String name = doc['name'] ?? 'dr. Nadia S., Sp.KJ';
-    final String role = doc['role'] ?? 'Psikiater Klinis Dewasa';
-    final String fee = doc['fee'] ?? doc['price'] ?? 'Rp 250.000';
-    final String displayRating = _totalReviewCount > 0 ? _liveRating.toStringAsFixed(1) : (doc['rating'] ?? '4.9').toString();
-    final String displayReviews = _totalReviewCount > 0 ? '$_totalReviewCount' : (doc['reviews'] ?? '340').toString();
-    final String experience = doc['experience'] ?? '9 Tahun';
-    final String patients = doc['patients'] ?? '2.100+';
-    final String education = doc['education'] ?? 'Spesialis Kedokteran Jiwa - FK Universitas Indonesia';
-    final String strNumber = doc['str'] ?? 'STR: 31.1.2.100.3.19.112233';
-    final String bio = doc['bio'] ??
-        'Berpengalaman lebih dari 8 tahun dalam menangani kasus kecemasan umum, depresi, trauma emosional, serta peningkatan resiliensi mental melalui pendekatan Cognitive Behavioral Therapy (CBT) dan Mindfulness.';
+    final String name = doc['name'] ?? '-';
+    final String role = doc['role'] ?? '-';
+    final String fee = (doc['fee'] ?? doc['price'] ?? '').toString().isNotEmpty
+        ? (doc['fee'] ?? doc['price']).toString()
+        : '-';
+    final String displayRating = (_totalReviewCount > 0 && _liveRating != null)
+        ? _liveRating!.toStringAsFixed(1)
+        : ((doc['rating'] != null && doc['rating'].toString() != '-' && doc['rating'].toString() != '0')
+            ? doc['rating'].toString()
+            : '-');
+    final String displayReviews = _totalReviewCount > 0
+        ? '$_totalReviewCount'
+        : ((doc['reviews'] != null && doc['reviews'].toString() != '0')
+            ? doc['reviews'].toString()
+            : '0');
+    final String experience = (doc['experience']?.toString() ?? '').isNotEmpty
+        ? doc['experience'].toString()
+        : '-';
+    final String patients = (doc['patients']?.toString() ?? '').isNotEmpty
+        ? doc['patients'].toString()
+        : '-';
+    final String education = (doc['education']?.toString() ?? '').isNotEmpty
+        ? doc['education'].toString()
+        : '-';
+    final String strNumber = (doc['str']?.toString() ?? '').isNotEmpty
+        ? doc['str'].toString()
+        : (doc['str_number']?.toString() ?? '-');
+    final String bio = (doc['bio']?.toString() ?? '').isNotEmpty
+        ? doc['bio'].toString()
+        : '-';
+    final String hospital = (doc['hospital']?.toString() ?? '').isNotEmpty
+        ? doc['hospital'].toString()
+        : '-';
 
     const Color primaryTeal = Color(0xFF006D77);
 
@@ -377,10 +470,16 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                const Icon(Icons.star_rounded, color: Color(0xFFFBBF24), size: 15),
+                                Icon(
+                                  Icons.star_rounded,
+                                  color: displayRating != '-' ? const Color(0xFFFBBF24) : Colors.white.withValues(alpha: 0.6),
+                                  size: 15,
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  '$displayRating ($displayReviews reviews)',
+                                  displayRating != '-'
+                                      ? '$displayRating ($displayReviews ulasan)'
+                                      : 'Belum ada rating',
                                   style: GoogleFonts.plusJakartaSans(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.w700,
@@ -476,7 +575,7 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
                           _buildAboutTab(bio, education, strNumber),
 
                           // Tab 3: Experiences
-                          _buildExperienceTab(primaryTeal),
+                          _buildExperienceTab(primaryTeal, experience, hospital, role),
 
                           // Tab 4: Reviews
                           _buildReviewsTab(displayRating, displayReviews),
@@ -489,10 +588,13 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
                       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                       child: Builder(
                         builder: (context) {
-                          final bool isSlotDisabled = _isSlotBooked(_selectedDate, _selectedTime) || _isDayFull(_selectedDate);
+                          final bool isNotPracticeDay = !_isDoctorPracticeDay(_selectedDate);
+                          final bool isSlotDisabled = isNotPracticeDay || _isSlotBooked(_selectedDate, _selectedTime) || _isDayFull(_selectedDate);
 
                           String buttonText = 'Lanjut ke Pembayaran';
-                          if (_isDayFull(_selectedDate)) {
+                          if (isNotPracticeDay) {
+                            buttonText = 'Bukan Jadwal Praktik Dokter';
+                          } else if (_isDayFull(_selectedDate)) {
                             buttonText = 'Tanggal Penuh (Pilih Tanggal Lain)';
                           } else if (_isSlotBooked(_selectedDate, _selectedTime)) {
                             buttonText = 'Sesi Telah Dibooking (Pilih Jam Lain)';
@@ -571,18 +673,40 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
   }
 
   Widget _buildScheduleTab(Color primaryTeal) {
+    final bool isPracticeDay = _isDoctorPracticeDay(_selectedDate);
     final bool isSelectedDateFull = _isDayFull(_selectedDate);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
       children: [
-        Text(
-          'Pilih Tanggal Sesi',
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 14.5,
-            fontWeight: FontWeight.w800,
-            color: const Color(0xFF0F172A),
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Pilih Tanggal Sesi',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+            if (_doctorAvailableDays.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCCFBF1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'Praktik: ${_doctorAvailableDays.join(", ")}',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF0F766E),
+                  ),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 10),
         _buildCalendarCard(primaryTeal),
@@ -601,22 +725,59 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: isSelectedDateFull ? const Color(0xFFF1F5F9) : const Color(0xFFCCFBF1),
+                color: !isPracticeDay
+                    ? const Color(0xFFF1F5F9)
+                    : isSelectedDateFull
+                        ? const Color(0xFFF1F5F9)
+                        : const Color(0xFFCCFBF1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                isSelectedDateFull ? 'Tanggal Penuh' : '2 Jam / Sesi',
+                !isPracticeDay
+                    ? 'Tutup / Libur'
+                    : isSelectedDateFull
+                        ? 'Tanggal Penuh'
+                        : '${_timeSlots.length} Sesi Dibuka',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 10.5,
                   fontWeight: FontWeight.w800,
-                  color: isSelectedDateFull ? const Color(0xFF64748B) : const Color(0xFF0D9488),
+                  color: !isPracticeDay || isSelectedDateFull
+                      ? const Color(0xFF64748B)
+                      : const Color(0xFF0D9488),
                 ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 10),
-        if (isSelectedDateFull) ...[
+        if (!isPracticeDay) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.event_busy_rounded, color: Color(0xFF94A3B8), size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Dokter tidak membuka praktik pada hari ${_weekdayMap[_selectedDate.weekday]}. Silakan pilih hari lain yang bertanda hijau pada kalender.',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF64748B),
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else if (isSelectedDateFull) ...[
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             margin: const EdgeInsets.only(bottom: 12),
@@ -643,8 +804,35 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
               ],
             ),
           ),
+        ] else if (_timeSlots.isEmpty) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, color: Color(0xFF94A3B8), size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Belum ada slot jam sesi yang diatur oleh dokter ini.',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else ...[
+          _buildTimeSlotGrid(primaryTeal),
         ],
-        _buildTimeSlotGrid(primaryTeal),
       ],
     );
   }
@@ -739,10 +927,12 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
 
               final day = index - leadingEmpty + 1;
               final dayDate = DateTime(_currentMonth.year, _currentMonth.month, day);
+              final isPracticeDay = _isDoctorPracticeDay(dayDate);
               final isDayFull = _isDayFull(dayDate);
               final isSelected = _selectedDate.year == _currentMonth.year &&
                   _selectedDate.month == _currentMonth.month &&
                   _selectedDate.day == day &&
+                  isPracticeDay &&
                   !isDayFull;
               final isToday = dayDate.year == DateTime.now().year &&
                   dayDate.month == DateTime.now().month &&
@@ -750,7 +940,7 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
               final isPast = dayDate.isBefore(
                 DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
               );
-              final bool isDisabled = isPast || isDayFull;
+              final bool isDisabled = isPast || isDayFull || !isPracticeDay;
 
               return InkWell(
                 onTap: isDisabled
@@ -777,33 +967,39 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
                       height: 32,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: isDayFull
-                            ? const Color(0xFFE2E8F0)
-                            : isSelected
-                                ? primaryTeal
-                                : isToday
-                                    ? const Color(0xFFCCFBF1)
-                                    : Colors.transparent,
-                        border: isToday && !isSelected && !isDayFull
+                        color: !isPracticeDay
+                            ? const Color(0xFFF1F5F9) // Abu-abu pudar di luar jadwal
+                            : isDayFull
+                                ? const Color(0xFFE2E8F0)
+                                : isSelected
+                                    ? primaryTeal
+                                    : isToday
+                                        ? const Color(0xFFCCFBF1)
+                                        : Colors.transparent,
+                        border: isToday && !isSelected && isPracticeDay && !isDayFull
                             ? Border.all(color: primaryTeal, width: 1.2)
                             : isDayFull
                                 ? Border.all(color: const Color(0xFFCBD5E1), width: 1.2)
-                                : null,
+                                : !isPracticeDay
+                                    ? Border.all(color: const Color(0xFFE2E8F0), width: 1)
+                                    : null,
                       ),
                       child: Center(
                         child: Text(
                           '$day',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 12,
-                            fontWeight: (isSelected || isToday) ? FontWeight.w800 : FontWeight.w600,
-                            color: isDayFull
-                                ? const Color(0xFF94A3B8)
-                                : isSelected
-                                    ? Colors.white
-                                    : isPast
-                                        ? const Color(0xFFCBD5E1)
-                                        : const Color(0xFF0F172A),
-                            decoration: isDayFull ? TextDecoration.lineThrough : null,
+                            fontWeight: (isSelected || isToday) && isPracticeDay ? FontWeight.w800 : FontWeight.w600,
+                            color: !isPracticeDay
+                                ? const Color(0xFF94A3B8) // Warna abu-abu teks
+                                : isDayFull
+                                    ? const Color(0xFF94A3B8)
+                                    : isSelected
+                                        ? Colors.white
+                                        : isPast
+                                            ? const Color(0xFFCBD5E1)
+                                            : const Color(0xFF0F172A),
+                            decoration: (!isPracticeDay || isDayFull) ? TextDecoration.lineThrough : null,
                           ),
                         ),
                       ),
@@ -850,21 +1046,21 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
                   ),
                 ],
               ),
-              const SizedBox(width: 18),
+              const SizedBox(width: 14),
               Row(
                 children: [
                   Container(
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE2E8F0),
+                      color: const Color(0xFFF1F5F9),
                       shape: BoxShape.circle,
                       border: Border.all(color: const Color(0xFF94A3B8), width: 1),
                     ),
                   ),
                   const SizedBox(width: 5),
                   Text(
-                    'Penuh (Tutup)',
+                    'Tutup / Libur',
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
@@ -1012,7 +1208,12 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
         const SizedBox(height: 6),
         Text(
           bio,
-          style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF475569), height: 1.45),
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 12,
+            color: bio == '-' ? const Color(0xFF94A3B8) : const Color(0xFF475569),
+            height: 1.45,
+            fontStyle: bio == '-' ? FontStyle.italic : FontStyle.normal,
+          ),
         ),
         const SizedBox(height: 14),
         Text(
@@ -1034,13 +1235,29 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
     );
   }
 
-  Widget _buildExperienceTab(Color primaryTeal) {
+  Widget _buildExperienceTab(Color primaryTeal, String experience, String hospital, String role) {
+    final bool hasData = experience != '-' || hospital != '-';
+
+    if (!hasData) {
+      return ListView(
+        padding: const EdgeInsets.all(18),
+        children: [
+          _buildTimelineItem(primaryTeal, '-', 'Pengalaman Praktik', '-'),
+          const SizedBox(height: 12),
+          _buildTimelineItem(primaryTeal, '-', 'Instansi / Rumah Sakit', '-'),
+        ],
+      );
+    }
+
     return ListView(
       padding: const EdgeInsets.all(18),
       children: [
-        _buildTimelineItem(primaryTeal, '2020 - Sekarang', 'Psikiater Klinis Senior', 'RS Mitra Sehat Jakarta & Konseling Digital'),
-        _buildTimelineItem(primaryTeal, '2017 - 2020', 'Spesialis Regulasi Emosi & Depresi', 'Pusat Terapi Harmoni Jiwa'),
-        _buildTimelineItem(primaryTeal, '2015 - 2017', 'Residensi Kedokteran Jiwa', 'RSUP Cipto Mangunkusumo'),
+        _buildTimelineItem(
+          primaryTeal,
+          experience != '-' ? experience : '-',
+          role != '-' ? role : 'Praktik Spesialis',
+          hospital != '-' ? hospital : 'Layanan Konseling Digital',
+        ),
       ],
     );
   }
@@ -1050,39 +1267,24 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
       return const Center(child: CircularProgressIndicator(color: Color(0xFF006D77)));
     }
 
-    final List<Map<String, String>> fallbackReviews = [
-      {
-        'user': 'Salsabila R.',
-        'rating': '5.0',
-        'date': '2 hari yang lalu',
-        'comment': 'Sangat mendengarkan tanpa menghakimi. Penjelasan CBT dan latihan grounding sangat membantu meredakan overthinking.',
-      },
-      {
-        'user': 'Andi Pratama',
-        'rating': '5.0',
-        'date': '1 minggu yang lalu',
-        'comment': 'Dokter memberikan arahan yang solutif dan praktis. Sangat direkomendasikan untuk yang sedang burnout kerja.',
-      },
-    ];
+    final bool hasReviews = _liveReviews.isNotEmpty;
 
-    final List<Map<String, String>> displayList = _liveReviews.isNotEmpty
-        ? _liveReviews.map((r) {
-            final rawDate = r['created_at']?.toString() ?? '';
-            String formattedDate = 'Baru saja';
-            if (rawDate.isNotEmpty) {
-              try {
-                final dt = DateTime.parse(rawDate).toLocal();
-                formattedDate = '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-              } catch (_) {}
-            }
-            return {
-              'user': (r['user_name'] ?? 'Pasien').toString(),
-              'rating': ((r['rating'] as num?)?.toDouble() ?? 5.0).toStringAsFixed(1),
-              'date': formattedDate,
-              'comment': (r['comment'] ?? '').toString().isNotEmpty ? r['comment'].toString() : 'Konsultasi sangat memuaskan.',
-            };
-          }).toList()
-        : fallbackReviews;
+    final List<Map<String, String>> displayList = _liveReviews.map((r) {
+      final rawDate = r['created_at']?.toString() ?? '';
+      String formattedDate = 'Baru saja';
+      if (rawDate.isNotEmpty) {
+        try {
+          final dt = DateTime.parse(rawDate).toLocal();
+          formattedDate = '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+        } catch (_) {}
+      }
+      return {
+        'user': (r['user_name'] ?? 'Pasien').toString(),
+        'rating': ((r['rating'] as num?)?.toDouble() ?? 5.0).toStringAsFixed(1),
+        'date': formattedDate,
+        'comment': (r['comment'] ?? '').toString().isNotEmpty ? r['comment'].toString() : 'Konsultasi selesai.',
+      };
+    }).toList();
 
     return ListView(
       padding: const EdgeInsets.all(18),
@@ -1098,11 +1300,11 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
           child: Row(
             children: [
               Text(
-                rating,
+                hasReviews ? rating : '-',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 32,
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xFF0F172A),
+                  color: hasReviews ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
                 ),
               ),
               const SizedBox(width: 14),
@@ -1112,12 +1314,18 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
                   children: [
                     Row(
                       children: List.generate(5, (index) {
-                        return const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 18);
+                        return Icon(
+                          Icons.star_rounded,
+                          color: hasReviews ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
+                          size: 18,
+                        );
                       }),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Berdasarkan $totalReviews ulasan pasien',
+                      hasReviews
+                          ? 'Berdasarkan $totalReviews ulasan pasien'
+                          : 'Belum ada ulasan dari pasien',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
@@ -1130,58 +1338,96 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
             ],
           ),
         ),
-        ...displayList.map((r) {
-          return Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFF1F5F9)),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF0F172A).withValues(alpha: 0.02),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
+        if (!hasReviews)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+            alignment: Alignment.center,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      r['user']!,
-                      style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
-                    ),
-                    Row(
-                      children: [
-                        const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
-                        const SizedBox(width: 2),
-                        Text(
-                          r['rating']!,
-                          style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
-                        ),
-                      ],
-                    ),
-                  ],
+                Container(
+                  width: 54,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.rate_review_outlined, color: Color(0xFF94A3B8), size: 28),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 12),
                 Text(
-                  r['date']!,
-                  style: GoogleFonts.plusJakartaSans(fontSize: 9.5, color: const Color(0xFF94A3B8)),
+                  'Belum Ada Ulasan',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0F172A),
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  r['comment']!,
-                  style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF475569), height: 1.35),
+                  'Dokter ini belum memiliki riwayat rating.\nJadilah pasien pertama yang berkonsultasi & memberi ulasan!',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11.5,
+                    color: const Color(0xFF64748B),
+                    height: 1.4,
+                  ),
                 ),
               ],
             ),
-          );
-        }),
+          )
+        else
+          ...displayList.map((r) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFF1F5F9)),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.02),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        r['user']!,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
+                          const SizedBox(width: 2),
+                          Text(
+                            r['rating']!,
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF334155)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    r['date']!,
+                    style: GoogleFonts.plusJakartaSans(fontSize: 9.5, color: const Color(0xFF94A3B8)),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    r['comment']!,
+                    style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF475569), height: 1.35),
+                  ),
+                ],
+              ),
+            );
+          }),
       ],
     );
   }

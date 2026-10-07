@@ -1669,13 +1669,14 @@ class ApiService {
       );
       if (res.statusCode == 200) {
         final List list = jsonDecode(res.body);
-        double avg = 5.0;
+        double? avg;
         if (list.isNotEmpty) {
-          avg = list.map((e) => (e['rating'] as num?)?.toDouble() ?? 5.0).reduce((a, b) => a + b) / list.length;
+          final total = list.map((e) => (e['rating'] as num?)?.toDouble() ?? 5.0).reduce((a, b) => a + b);
+          avg = double.parse((total / list.length).toStringAsFixed(1));
         }
         return {
           'doctor_id': psychologistId,
-          'rating': double.parse(avg.toStringAsFixed(1)),
+          'rating': avg,
           'total_reviews': list.length,
           'reviews': list,
         };
@@ -1684,7 +1685,7 @@ class ApiService {
 
     return {
       'doctor_id': psychologistId,
-      'rating': 5.0,
+      'rating': null,
       'total_reviews': 0,
       'reviews': [],
     };

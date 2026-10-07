@@ -133,9 +133,33 @@ def get_psychologists():
         try:
             res = sp.table("psychologists").select("*").eq("is_available", True).execute()
             if res.data:
+                # Ambil semua data reviews sekaligus untuk perhitungan agregat
+                all_revs_map = {}
+                try:
+                    revs_res = sp.table("doctor_reviews").select("psychologist_id, rating").execute()
+                    if revs_res.data:
+                        for r in revs_res.data:
+                            pid = str(r.get("psychologist_id"))
+                            if pid not in all_revs_map:
+                                all_revs_map[pid] = []
+                            all_revs_map[pid].append(float(r.get("rating", 0)))
+                except Exception:
+                    pass
+
                 cleaned = []
                 for p in res.data:
                     doc = dict(p)
+                    doc_id = str(doc.get("id"))
+                    
+                    # Hitung rating riil jika ada review di DB
+                    if doc_id in all_revs_map and len(all_revs_map[doc_id]) > 0:
+                        ratings_list = all_revs_map[doc_id]
+                        doc["rating"] = round(sum(ratings_list) / len(ratings_list), 1)
+                        doc["reviews"] = len(ratings_list)
+                    else:
+                        doc["rating"] = None  # Belum ada rating
+                        doc["reviews"] = 0
+
                     raw_cat = doc.get("category", "")
                     if raw_cat and isinstance(raw_cat, str) and raw_cat.strip().startswith("{"):
                         try:
@@ -601,9 +625,9 @@ def get_doctor_reviews(doctor_id: str):
             res = sp.table("doctor_reviews").select("*").eq("psychologist_id", doctor_id).order("created_at", desc=True).execute()
             if res.data is not None:
                 revs = res.data
-                avg_val = 5.0
-                if revs:
-                    avg_val = round(sum(float(r.get("rating", 5)) for r in revs) / len(revs), 1)
+                avg_val = None
+                if revs and len(revs) > 0:
+                    avg_val = round(sum(float(r.get("rating", 0)) for r in revs) / len(revs), 1)
                 return {
                     "doctor_id": doctor_id,
                     "rating": avg_val,
@@ -614,10 +638,10 @@ def get_doctor_reviews(doctor_id: str):
             print(f"Supabase get_doctor_reviews error: {e}")
 
     # Fallback in-memory
-    doc_revs = [r for r in _inmemory_reviews if r.get("psychologist_id") == doctor_id]
-    avg_val = 5.0
-    if doc_revs:
-        avg_val = round(sum(float(r.get("rating", 5)) for r in doc_revs) / len(doc_revs), 1)
+    doc_revs = [r for r in _inmemory_reviews if str(r.get("psychologist_id")) == str(doctor_id)]
+    avg_val = None
+    if doc_revs and len(doc_revs) > 0:
+        avg_val = round(sum(float(r.get("rating", 0)) for r in doc_revs) / len(doc_revs), 1)
     return {
         "doctor_id": doctor_id,
         "rating": avg_val,

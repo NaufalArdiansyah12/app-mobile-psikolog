@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -146,26 +147,40 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 margin: const EdgeInsets.symmetric(horizontal: 16),
                 height: 68,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.95),
                   borderRadius: BorderRadius.circular(34),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.5),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF0F172A).withValues(alpha: 0.10),
+                      color: const Color(0xFF0F172A).withValues(alpha: 0.12),
                       blurRadius: 28,
                       offset: const Offset(0, 10),
                     ),
                   ],
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildNavItem(0, Icons.home_outlined, Icons.home_rounded, "Beranda"),
-                    _buildNavItem(1, Icons.auto_stories_outlined, Icons.auto_stories_rounded, "Jurnal"),
-                    _buildCenterAiNavItem(2),
-                    _buildNavItem(3, Icons.medical_services_outlined, Icons.medical_services_rounded, "Konsultasi"),
-                    _buildNavItem(4, Icons.person_outline_rounded, Icons.person_rounded, "Profil"),
-                  ],
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(34),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.82),
+                        borderRadius: BorderRadius.circular(34),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildNavItem(0, Icons.home_outlined, Icons.home_rounded, "Beranda"),
+                          _buildNavItem(1, Icons.auto_stories_outlined, Icons.auto_stories_rounded, "Jurnal"),
+                          _buildCenterAiNavItem(2),
+                          _buildNavItem(3, Icons.medical_services_outlined, Icons.medical_services_rounded, "Konsultasi"),
+                          _buildNavItem(4, Icons.person_outline_rounded, Icons.person_rounded, "Profil"),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1180,52 +1195,71 @@ class HomeScreenState extends State<HomeScreen> {
             // Dua Kartu Interaktif: Box Breathing & Grounding 5-4-3-2-1
             Row(
               children: [
-                // Box Breathing
+                // Box Breathing (Liquid Glass)
                 Expanded(
-                  child: InkWell(
-                    onTap: () => _showBreathingModal(BreathingTechnique.box),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFFBEB),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFFDE68A)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.air_rounded,
-                              color: Color(0xFFD97706),
-                              size: 22,
-                            ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(22),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: InkWell(
+                        onTap: () => _showBreathingModal(BreathingTechnique.box),
+                        borderRadius: BorderRadius.circular(22),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFFBEB).withValues(alpha: 0.82),
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFD97706).withValues(alpha: 0.08),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Box Breathing',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              color: const Color(0xFF0F172A),
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.04),
+                                      blurRadius: 6,
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.air_rounded,
+                                  color: Color(0xFFD97706),
+                                  size: 22,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Box Breathing',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Tahan napas 4 detik saat cemas',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 10.5,
+                                  color: const Color(0xFF78350F),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Tahan napas 4 detik saat cemas',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 10.5,
-                              color: const Color(0xFF78350F),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -1233,52 +1267,71 @@ class HomeScreenState extends State<HomeScreen> {
 
                 const SizedBox(width: 12),
 
-                // Grounding 5-4-3-2-1
+                // Grounding 5-4-3-2-1 (Liquid Glass)
                 Expanded(
-                  child: InkWell(
-                    onTap: _showGroundingModal,
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFCCFBF1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFF99F6E4)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.self_improvement_rounded,
-                              color: Color(0xFF0D9488),
-                              size: 22,
-                            ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(22),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: InkWell(
+                        onTap: _showGroundingModal,
+                        borderRadius: BorderRadius.circular(22),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFCCFBF1).withValues(alpha: 0.78),
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF0D9488).withValues(alpha: 0.08),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Grounding 5-4-3-2-1',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              color: const Color(0xFF0F172A),
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.04),
+                                      blurRadius: 6,
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.self_improvement_rounded,
+                                  color: Color(0xFF0D9488),
+                                  size: 22,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Grounding 5-4-3-2-1',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Redakan overthinking & panik',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 10.5,
+                                  color: const Color(0xFF115E59),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Redakan overthinking & panik',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 10.5,
-                              color: const Color(0xFF115E59),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),

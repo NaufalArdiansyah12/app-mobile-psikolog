@@ -954,19 +954,31 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFEF3C7),
+                              color: (doc['rating'] != null && doc['rating'].toString() != '-' && doc['rating'].toString() != '0')
+                                  ? const Color(0xFFFEF3C7)
+                                  : const Color(0xFFF1F5F9),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.star_rounded, color: Color(0xFFD97706), size: 14),
+                                Icon(
+                                  Icons.star_rounded,
+                                  color: (doc['rating'] != null && doc['rating'].toString() != '-' && doc['rating'].toString() != '0')
+                                      ? const Color(0xFFD97706)
+                                      : const Color(0xFF94A3B8),
+                                  size: 14,
+                                ),
                                 const SizedBox(width: 3),
                                 Text(
-                                  "${doc['rating']}",
+                                  (doc['rating'] != null && doc['rating'].toString().isNotEmpty && doc['rating'].toString() != '0')
+                                      ? "${doc['rating']}"
+                                      : "-",
                                   style: GoogleFonts.plusJakartaSans(
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w800,
-                                    color: const Color(0xFFB45309),
+                                    color: (doc['rating'] != null && doc['rating'].toString() != '-' && doc['rating'].toString() != '0')
+                                        ? const Color(0xFFB45309)
+                                        : const Color(0xFF64748B),
                                   ),
                                 ),
                               ],
@@ -974,13 +986,13 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            "• ${doc['experience']}",
+                            "• ${(doc['experience'] != null && doc['experience'].toString().isNotEmpty) ? doc['experience'] : '-'}",
                             style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF64748B)),
                           ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              "• ${doc['hospital']}",
+                              "• ${(doc['hospital'] != null && doc['hospital'].toString().isNotEmpty) ? doc['hospital'] : '-'}",
                               style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF94A3B8)),
                               overflow: TextOverflow.ellipsis,
                             ),
