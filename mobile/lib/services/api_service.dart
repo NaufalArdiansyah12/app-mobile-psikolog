@@ -943,12 +943,12 @@ class ApiService {
   }) async {
     // 1. Map psychologist ID ke UUID resmi Supabase
     String targetPsyId = psychologistId;
-    if (psychologistId == 'psy_1') targetPsyId = 'ce2677f2-6831-4769-adb2-b29f27359aa9';
+    if (psychologistId == 'psy_1') targetPsyId = '3354dda3-863d-48a2-ab48-19d1cded24dc';
     if (psychologistId == 'psy_2') targetPsyId = '210ee97a-767c-4278-88cf-c152624893d5';
     if (psychologistId == 'psy_3') targetPsyId = '01e6be3c-373f-4d55-8ee2-cc68568a772e';
     if (psychologistId == 'psy_4') targetPsyId = '85fce5a3-86bf-4b38-aa6c-c1916589e024';
     if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(targetPsyId)) {
-      targetPsyId = 'ce2677f2-6831-4769-adb2-b29f27359aa9';
+      targetPsyId = '3354dda3-863d-48a2-ab48-19d1cded24dc';
     }
 
     String bookingId = const Uuid().v4();
@@ -1403,45 +1403,140 @@ class ApiService {
     return 'pending';
   }
 
-  // Ambil Percakapan 1-on-1 dengan Dokter
-  Future<List<Map<String, dynamic>>> getDoctorChatMessages(String bookingId) async {
+  // Ambil Percakapan 1-on-1 dengan Dokter (Bersambung & Tidak Pernah Hilang)
+  Future<List<Map<String, dynamic>>> getDoctorChatMessages(
+    String bookingId, {
+    String? doctorId,
+    String? userUuid,
+  }) async {
+    // 1. Ambil riwayat percakapan dokter yang sudah ada di lokal
+    List<Map<String, dynamic>> combined = [];
+    if (doctorId != null && _localBookingChats.containsKey('doc_$doctorId')) {
+      combined = List<Map<String, dynamic>>.from(_localBookingChats['doc_$doctorId']!);
+    }
+    if (combined.isEmpty && doctorId != null) {
+      combined = await StorageService().getDoctorChat('', doctorId: doctorId);
+    }
+    if (combined.isEmpty && bookingId.isNotEmpty) {
+      if (_localBookingChats.containsKey(bookingId)) {
+        combined = List<Map<String, dynamic>>.from(_localBookingChats[bookingId]!);
+      } else {
+        combined = await StorageService().getDoctorChat(bookingId, doctorId: doctorId);
+      }
+    }
+
+    // 2. Ambil dari API Backend
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/consultation/chat/$bookingId/messages'));
+      final queryParams = <String, String>{};
+      if (doctorId != null && doctorId.isNotEmpty) queryParams['doctor_id'] = doctorId;
+      if (userUuid != null && userUuid.isNotEmpty) queryParams['user_uuid'] = userUuid;
+
+      final uri = Uri.parse('$baseUrl/api/consultation/chat/$bookingId/messages')
+          .replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
+      final res = await http.get(uri);
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         final serverList = List<Map<String, dynamic>>.from(data['messages'] ?? []);
         if (serverList.isNotEmpty) {
-          _localBookingChats[bookingId] = serverList;
-          await StorageService().saveDoctorChat(bookingId, serverList);
-          return serverList;
+          if (combined.isEmpty) {
+            combined = serverList;
+          } else {
+            // Gabungkan pesan baru dari server tanpa menghapus percakapan yang sudah ada
+            for (final sMsg in serverList) {
+              final sId = sMsg['id']?.toString() ?? '';
+              final sText = sMsg['message']?.toString() ?? '';
+              final isGenericWelcome = sId.startsWith('welcome_') ||
+                  sText.startsWith('Halo! Pembayaran') ||
+                  sText.startsWith('Halo! Selamat datang');
+              if (isGenericWelcome &&
+                  combined.any((m) => !(m['id']?.toString().startsWith('welcome_') ?? false))) {
+                continue;
+              }
+              if (!combined.any((m) =>
+                  m['id'] == sId ||
+                  (m['message'] == sText && m['sender_role'] == sMsg['sender_role']))) {
+                combined.add(sMsg);
+              }
+            }
+          }
         }
       }
     } catch (_) {}
 
-    if (_localBookingChats.containsKey(bookingId) && _localBookingChats[bookingId]!.isNotEmpty) {
-      return _localBookingChats[bookingId]!;
+    // 3. Fallback langsung ke Supabase Cloud DB chat_messages jika lokal masih kosong
+    if (combined.isEmpty &&
+        userUuid != null &&
+        userUuid.isNotEmpty &&
+        doctorId != null &&
+        doctorId.isNotEmpty) {
+      try {
+        const supabaseUrl = 'https://ydlzrtpdsqaobxidrjvc.supabase.co';
+        final headers = {
+          'apikey': _supabaseKey,
+          'Authorization': 'Bearer $_supabaseKey',
+        };
+        String? userId;
+        final uRes = await http.get(
+          Uri.parse('$supabaseUrl/rest/v1/users?device_uuid=eq.$userUuid&select=id'),
+          headers: headers,
+        );
+        if (uRes.statusCode == 200) {
+          final uList = jsonDecode(uRes.body) as List;
+          if (uList.isNotEmpty) userId = uList[0]['id']?.toString();
+        }
+        if (userId != null && userId.isNotEmpty) {
+          final sessRes = await http.get(
+            Uri.parse('$supabaseUrl/rest/v1/chat_sessions?title=eq.consultation:$userId:$doctorId&select=id'),
+            headers: headers,
+          );
+          if (sessRes.statusCode == 200) {
+            final sessList = jsonDecode(sessRes.body) as List;
+            if (sessList.isNotEmpty) {
+              final sId = sessList[0]['id']?.toString() ?? '';
+              final msgRes = await http.get(
+                Uri.parse('$supabaseUrl/rest/v1/chat_messages?session_id=eq.$sId&select=id,role,content,created_at&order=created_at.asc'),
+                headers: headers,
+              );
+              if (msgRes.statusCode == 200) {
+                final msgList = jsonDecode(msgRes.body) as List;
+                for (final row in msgList) {
+                  combined.add({
+                    'id': row['id'],
+                    'booking_id': bookingId,
+                    'sender_id': row['role'] == 'assistant' ? 'doctor_id' : userUuid,
+                    'sender_name': row['role'] == 'assistant' ? 'dr. Spesialis' : 'Pasien',
+                    'sender_role': row['role'] == 'assistant' ? 'doctor' : 'user',
+                    'message': row['content'] ?? '',
+                    'created_at': row['created_at'],
+                  });
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
     }
 
-    final persisted = await StorageService().getDoctorChat(bookingId);
-    if (persisted.isNotEmpty) {
-      _localBookingChats[bookingId] = persisted;
-      return persisted;
+    // 4. Inisialisasi default jika baru pertama kali membuka konsultasi
+    if (combined.isEmpty) {
+      final initialList = <Map<String, dynamic>>[
+        <String, dynamic>{
+          'id': 'welcome_doc_msg',
+          'booking_id': bookingId,
+          'sender_id': 'doctor_id',
+          'sender_name': 'dr. Spesialis',
+          'sender_role': 'doctor',
+          'message': 'Halo! Sesi konsultasi Anda telah aktif. Saya siap mendengarkan cerita dan apa yang sedang Anda rasakan. Silakan ceritakan dengan nyaman di sini ya.',
+          'created_at': DateTime.now().toIso8601String(),
+        }
+      ];
+      combined = initialList;
     }
 
-    final initialList = <Map<String, dynamic>>[
-      <String, dynamic>{
-        'id': 'welcome_doc_msg',
-        'booking_id': bookingId,
-        'sender_id': 'doctor_id',
-        'sender_name': 'dr. Nadia S., Sp.KJ',
-        'sender_role': 'doctor',
-        'message': 'Halo! Sesi konsultasi Anda telah aktif. Saya siap mendengarkan cerita dan apa yang sedang Anda rasakan. Silakan ceritakan dengan nyaman di sini ya.',
-        'created_at': DateTime.now().toIso8601String(),
-      }
-    ];
-    _localBookingChats[bookingId] = initialList;
-    await StorageService().saveDoctorChat(bookingId, initialList);
-    return initialList;
+    _localBookingChats[bookingId] = combined;
+    if (doctorId != null) _localBookingChats['doc_$doctorId'] = combined;
+    await StorageService().saveDoctorChat(bookingId, combined, doctorId: doctorId);
+    return combined;
   }
 
   // Kirim Pesan dalam Sesi Konsultasi (Pasien atau Dokter)
@@ -1451,7 +1546,66 @@ class ApiService {
     required String senderName,
     required String message,
     String senderRole = 'user',
+    String? doctorId,
   }) async {
+    // 1. Simpan langsung ke Supabase Cloud DB secara instan & redundan
+    if (doctorId != null && doctorId.isNotEmpty && senderId.isNotEmpty) {
+      try {
+        const supabaseUrl = 'https://ydlzrtpdsqaobxidrjvc.supabase.co';
+        final headers = {
+          'apikey': _supabaseKey,
+          'Authorization': 'Bearer $_supabaseKey',
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+        };
+        String userId = senderId;
+        if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(userId)) {
+          final uRes = await http.get(
+            Uri.parse('$supabaseUrl/rest/v1/users?device_uuid=eq.$senderId&select=id'),
+            headers: headers,
+          );
+          if (uRes.statusCode == 200) {
+            final uList = jsonDecode(uRes.body) as List;
+            if (uList.isNotEmpty) userId = uList[0]['id']?.toString() ?? userId;
+          }
+        }
+        if (RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(userId)) {
+          final title = 'consultation:$userId:$doctorId';
+          String? sessId;
+          final sRes = await http.get(
+            Uri.parse('$supabaseUrl/rest/v1/chat_sessions?title=eq.$title&select=id'),
+            headers: headers,
+          );
+          if (sRes.statusCode == 200) {
+            final sList = jsonDecode(sRes.body) as List;
+            if (sList.isNotEmpty) sessId = sList[0]['id']?.toString();
+          }
+          if (sessId == null) {
+            final newS = await http.post(
+              Uri.parse('$supabaseUrl/rest/v1/chat_sessions'),
+              headers: headers,
+              body: jsonEncode({'user_id': userId, 'title': title}),
+            );
+            if (newS.statusCode == 200 || newS.statusCode == 201) {
+              final nList = jsonDecode(newS.body) as List;
+              if (nList.isNotEmpty) sessId = nList[0]['id']?.toString();
+            }
+          }
+          if (sessId != null) {
+            await http.post(
+              Uri.parse('$supabaseUrl/rest/v1/chat_messages'),
+              headers: headers,
+              body: jsonEncode({
+                'session_id': sessId,
+                'role': senderRole == 'doctor' ? 'assistant' : 'user',
+                'content': message,
+              }),
+            );
+          }
+        }
+      } catch (_) {}
+    }
+
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/api/consultation/chat/$bookingId/send'),
@@ -1472,7 +1626,15 @@ class ApiService {
             _localBookingChats[bookingId] = [];
           }
           _localBookingChats[bookingId]!.add(serverMsg);
-          await StorageService().saveDoctorChat(bookingId, _localBookingChats[bookingId]!);
+          if (doctorId != null) {
+            if (!_localBookingChats.containsKey('doc_$doctorId')) {
+              _localBookingChats['doc_$doctorId'] = [];
+            }
+            if (!_localBookingChats['doc_$doctorId']!.any((m) => m['id'] == serverMsg['id'])) {
+              _localBookingChats['doc_$doctorId']!.add(serverMsg);
+            }
+          }
+          await StorageService().saveDoctorChat(bookingId, _localBookingChats[bookingId]!, doctorId: doctorId);
         }
         return data;
       }
@@ -1491,7 +1653,13 @@ class ApiService {
       _localBookingChats[bookingId] = [];
     }
     _localBookingChats[bookingId]!.add(fallbackMsg);
-    await StorageService().saveDoctorChat(bookingId, _localBookingChats[bookingId]!);
+    if (doctorId != null) {
+      if (!_localBookingChats.containsKey('doc_$doctorId')) {
+        _localBookingChats['doc_$doctorId'] = [];
+      }
+      _localBookingChats['doc_$doctorId']!.add(fallbackMsg);
+    }
+    await StorageService().saveDoctorChat(bookingId, _localBookingChats[bookingId]!, doctorId: doctorId);
 
     return {
       'status': 'offline',
@@ -1566,7 +1734,18 @@ class ApiService {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         final list = List<Map<String, dynamic>>.from(data['sessions'] ?? []);
-        if (list.isNotEmpty) return list;
+        if (list.isNotEmpty) {
+          final result = <Map<String, dynamic>>[];
+          final seenDocIds = <String>{};
+          for (final s in list) {
+            final doc = s['doctor'] as Map<String, dynamic>?;
+            final docId = (doc?['id'] ?? s['psychologist_id'] ?? '').toString();
+            if (docId.isNotEmpty && seenDocIds.contains(docId)) continue;
+            if (docId.isNotEmpty) seenDocIds.add(docId);
+            result.add(s);
+          }
+          return result;
+        }
       }
     } catch (_) {}
 
@@ -1601,8 +1780,13 @@ class ApiService {
       if (res.statusCode == 200) {
         final list = jsonDecode(res.body) as List;
         final result = <Map<String, dynamic>>[];
+        final seenDocIds = <String>{};
         for (final item in list) {
           final doc = Map<String, dynamic>.from((item['psychologists'] as Map?) ?? {});
+          final docId = (doc['id'] ?? '').toString();
+          if (docId.isNotEmpty && seenDocIds.contains(docId)) continue;
+          if (docId.isNotEmpty) seenDocIds.add(docId);
+
           final rawCat = doc['category'];
           if (rawCat is String && rawCat.trim().startsWith('{')) {
             try {

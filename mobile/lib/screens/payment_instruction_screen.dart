@@ -10,12 +10,14 @@ class PaymentInstructionScreen extends StatefulWidget {
   final Map<String, dynamic> chargeData;
   final Map<String, dynamic> doctor;
   final String formattedSchedule;
+  final bool isRebooking;
 
   const PaymentInstructionScreen({
     super.key,
     required this.chargeData,
     required this.doctor,
     required this.formattedSchedule,
+    this.isRebooking = false,
   });
 
   @override
@@ -202,15 +204,22 @@ class _PaymentInstructionScreenState extends State<PaymentInstructionScreen> {
                 ),
                 onPressed: () {
                   Navigator.of(ctx).pop();
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                      builder: (_) => DoctorConsultationChatScreen(
-                        bookingId: widget.chargeData['booking_id'] ?? '',
-                        doctor: widget.doctor,
-                        scheduleTime: widget.formattedSchedule,
+                  if (widget.isRebooking) {
+                    Navigator.of(context).pop({
+                      'booking_id': widget.chargeData['booking_id'] ?? '',
+                      'schedule_time': widget.formattedSchedule,
+                    });
+                  } else {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => DoctorConsultationChatScreen(
+                          bookingId: widget.chargeData['booking_id'] ?? '',
+                          doctor: widget.doctor,
+                          scheduleTime: widget.formattedSchedule,
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                  }
                 },
               ),
             ),

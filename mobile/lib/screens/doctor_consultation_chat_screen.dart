@@ -62,6 +62,9 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
   bool _isSending = false;
   String _userUuid = '';
   String _userName = 'Pasien';
+  late Map<String, dynamic> _doctor;
+  late String _bookingId;
+  late String _scheduleTime;
 
   final List<String> _quickChips = [
     "Sering merasa cemas tiba-tiba",
@@ -73,6 +76,10 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
   @override
   void initState() {
     super.initState();
+    _doctor = Map<String, dynamic>.from(widget.doctor);
+    _bookingId = widget.bookingId;
+    _scheduleTime = widget.scheduleTime;
+    _loadDoctorDetails();
     _initChat();
     _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       _pollNewMessages();
@@ -81,8 +88,47 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
     _checkAndShowRatingModal();
   }
 
+  void _handleRebooking() async {
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DoctorDetailScreen(doctor: _doctor, isRebooking: true),
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        _bookingId = result['booking_id']?.toString() ?? _bookingId;
+        _scheduleTime = result['schedule_time']?.toString() ?? _scheduleTime;
+      });
+      _initChat();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Sesi konsultasi lanjutan berhasil diaktifkan!',
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+          ),
+          backgroundColor: const Color(0xFF0D9488),
+        ),
+      );
+    }
+  }
+
+  void _loadDoctorDetails() async {
+    final docId = _doctor['id']?.toString() ?? 'psy_1';
+    final psychologists = await _apiService.getPsychologists();
+    final matched = psychologists.firstWhere(
+      (p) => p['id']?.toString() == docId,
+      orElse: () => {},
+    );
+    if (matched.isNotEmpty && mounted) {
+      setState(() {
+        _doctor = Map<String, dynamic>.from(matched);
+      });
+    }
+  }
+
   DoctorChatSessionInfo _getChatSessionInfo() {
-    final schedule = widget.scheduleTime;
+    final schedule = _scheduleTime;
     final now = DateTime.now();
     final lower = schedule.toLowerCase();
 
@@ -210,7 +256,7 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
     final sessionInfo = _getChatSessionInfo();
     if (sessionInfo.status != DoctorChatSessionStatus.expired) return;
 
-    final hasReviewed = await _storage.hasReviewedBooking(widget.bookingId);
+    final hasReviewed = await _storage.hasReviewedBooking(_bookingId);
     if (hasReviewed || !mounted) return;
 
     // Tunggu sedikit agar chat terbuka dulu dengan halus
@@ -367,7 +413,7 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
                           : () async {
                               setModalState(() => isSubmitting = true);
                               final success = await _apiService.submitDoctorReview(
-                                bookingId: widget.bookingId,
+                                bookingId: _bookingId,
                                 psychologistId: docId,
                                 rating: selectedRating,
                                 comment: commentCtrl.text.trim(),
@@ -376,7 +422,7 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
                               );
                               setModalState(() => isSubmitting = false);
                               if (success) {
-                                await _storage.setReviewedBooking(widget.bookingId);
+                                await _storage.setReviewedBooking(_bookingId);
                                 if (modalCtx.mounted) Navigator.pop(modalCtx);
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -407,12 +453,7 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
                   TextButton.icon(
                     onPressed: () {
                       Navigator.pop(modalCtx);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DoctorDetailScreen(doctor: widget.doctor),
-                        ),
-                      );
+                      _handleRebooking();
                     },
                     icon: const Icon(Icons.calendar_month_rounded, size: 16, color: Color(0xFF0D9488)),
                     label: Text(
@@ -436,7 +477,12 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
   void _initChat() async {
     final uuid = await _storage.getOrCreateUserUuid();
     final name = await _storage.getNickname();
-    final msgs = await _apiService.getDoctorChatMessages(widget.bookingId);
+    final docId = _doctor['id']?.toString() ?? 'psy_1';
+    final msgs = await _apiService.getDoctorChatMessages(
+      _bookingId,
+      doctorId: docId,
+      userUuid: uuid,
+    );
 
     if (!mounted) return;
     setState(() {
@@ -451,7 +497,12 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
 
   void _pollNewMessages() async {
     if (!mounted || _isSending) return;
-    final msgs = await _apiService.getDoctorChatMessages(widget.bookingId);
+    final docId = _doctor['id']?.toString() ?? 'psy_1';
+    final msgs = await _apiService.getDoctorChatMessages(
+      _bookingId,
+      doctorId: docId,
+      userUuid: _userUuid,
+    );
     if (!mounted) return;
     if (msgs.length != _messages.length ||
         (msgs.isNotEmpty && _messages.isNotEmpty && msgs.last['id'] != _messages.last['id'])) {
@@ -494,12 +545,14 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
     final text = prefilledText ?? _textController.text.trim();
     if (text.isEmpty || _isSending) return;
 
+    final docId = _doctor['id']?.toString() ?? 'psy_1';
+
     _textController.clear();
     setState(() {
       _isSending = true;
       _messages.add({
         'id': 'temp_${DateTime.now().millisecondsSinceEpoch}',
-        'booking_id': widget.bookingId,
+        'booking_id': _bookingId,
         'sender_id': _userUuid,
         'sender_name': _userName,
         'sender_role': 'user',
@@ -510,11 +563,12 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
     _scrollToBottom();
 
     final result = await _apiService.sendDoctorMessage(
-      bookingId: widget.bookingId,
+      bookingId: _bookingId,
       senderId: _userUuid,
       senderName: _userName,
       message: text,
       senderRole: 'user',
+      doctorId: docId,
     );
 
     if (!mounted) return;
@@ -961,7 +1015,7 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
                             const SizedBox(height: 2),
                             Text(
                               sessionInfo.status == DoctorChatSessionStatus.upcoming
-                                  ? 'Fitur kirim pesan dibuka saat jam sesi: ${widget.scheduleTime}'
+                                  ? 'Fitur kirim pesan dibuka saat jam sesi: $_scheduleTime'
                                   : 'Waktu konsultasi 2 jam telah selesai. Booking sesi baru untuk lanjut berkonsultasi.',
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 11,
@@ -1005,14 +1059,7 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => DoctorDetailScreen(doctor: widget.doctor),
-                            ),
-                          );
-                        },
+                        onPressed: _handleRebooking,
                       ),
                     ),
                   ],

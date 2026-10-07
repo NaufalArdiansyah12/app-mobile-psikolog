@@ -155,10 +155,25 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
     final docs = await _apiService.getPsychologists();
     final sessions = await _apiService.getUserActiveSessions(uuid);
     if (!mounted) return;
+
+    // Deduplikasi sesi per dokter agar perpanjangan sesi memperbarui ruangan yang sama
+    final seenDocIds = <String>{};
+    final dedupedSessions = <Map<String, dynamic>>[];
+    for (final s in sessions) {
+      final doc = s['doctor'] as Map<String, dynamic>?;
+      final docId = (doc?['id'] ?? s['psychologist_id'] ?? '').toString();
+      if (docId.isNotEmpty && !seenDocIds.contains(docId)) {
+        seenDocIds.add(docId);
+        dedupedSessions.add(s);
+      } else if (docId.isEmpty) {
+        dedupedSessions.add(s);
+      }
+    }
+
     setState(() {
       _userUuid = uuid;
       _therapists = docs.isNotEmpty ? docs : _defaultTherapists;
-      _activeSessions = sessions;
+      _activeSessions = dedupedSessions;
       _isLoading = false;
     });
   }
@@ -868,12 +883,16 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
                       style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w800),
                     ),
                     onPressed: () {
+                      final fullDoc = _therapists.firstWhere(
+                        (p) => p['id']?.toString() == doc['id']?.toString(),
+                        orElse: () => doc,
+                      );
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => DoctorConsultationChatScreen(
                             bookingId: bookingId,
-                            doctor: doc,
+                            doctor: fullDoc,
                             scheduleTime: schedule,
                           ),
                         ),

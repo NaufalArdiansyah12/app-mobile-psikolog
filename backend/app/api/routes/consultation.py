@@ -27,12 +27,51 @@ _default_psychologists = [
 # In-memory storage untuk tracking pembayaran dan chat dokter
 _inmemory_bookings: List[Dict[str, Any]] = []
 _inmemory_payments: Dict[str, Dict[str, Any]] = {} # order_id -> payment details
-_inmemory_doctor_chats: Dict[str, List[Dict[str, Any]]] = {} # booking_id -> messages
+_inmemory_doctor_chats: Dict[str, List[Dict[str, Any]]] = {} # conversation_key / booking_id -> messages
 
 
-def _get_chat_session(sp, booking_id: str, create: bool = False):
-    """Use existing chat tables when consultation_messages migration is not deployed."""
-    title = f"consultation:{booking_id}"
+def _resolve_conversation_key(sp, booking_id: str, doctor_id: Optional[str] = None, user_uuid: Optional[str] = None):
+    """Menemukan pair (user_id, psychologist_id) dan semua booking_id terkait untuk kontinuitas chat."""
+    uid = None
+    pid = doctor_id
+    related_booking_ids = [booking_id]
+
+    if sp:
+        try:
+            b_res = sp.table("bookings").select("user_id, psychologist_id").eq("id", booking_id).limit(1).execute()
+            if b_res.data:
+                uid = str(b_res.data[0].get("user_id"))
+                pid = str(b_res.data[0].get("psychologist_id"))
+            elif user_uuid:
+                u_res = sp.table("users").select("id").eq("device_uuid", user_uuid).limit(1).execute()
+                if u_res.data:
+                    uid = str(u_res.data[0].get("id"))
+
+            if uid and pid:
+                all_b = sp.table("bookings").select("id").eq("user_id", uid).eq("psychologist_id", pid).execute()
+                if all_b.data:
+                    related_booking_ids = [str(r["id"]) for r in all_b.data if "id" in r]
+                    if booking_id not in related_booking_ids:
+                        related_booking_ids.append(booking_id)
+        except Exception as e:
+            print(f"Supabase resolve conversation error: {e}")
+
+    # Fallback cek memory
+    if not uid or not pid:
+        for mem_b in _inmemory_bookings:
+            if mem_b.get("id") == booking_id:
+                uid = uid or mem_b.get("user_uuid")
+                pid = pid or mem_b.get("psychologist_id")
+                break
+
+    conv_key = f"conv_{uid or user_uuid or 'user'}_{pid or 'doctor'}"
+    return conv_key, uid, pid, related_booking_ids
+
+
+def _get_chat_session(sp, booking_id: str, create: bool = False, doctor_id: Optional[str] = None, user_uuid: Optional[str] = None):
+    """Gunakan sesi chat yang konsisten per pasangan user & dokter agar percakapan terus bersambung."""
+    _, uid, pid, _ = _resolve_conversation_key(sp, booking_id, doctor_id, user_uuid)
+    title = f"consultation:{uid or 'user'}:{pid or 'doctor'}"
     try:
         found = sp.table("chat_sessions").select("id").eq("title", title).limit(1).execute()
         if found.data:
@@ -40,11 +79,17 @@ def _get_chat_session(sp, booking_id: str, create: bool = False):
         if not create:
             return None
 
-        booking = sp.table("bookings").select("user_id").eq("id", booking_id).limit(1).execute()
-        if not booking.data:
+        actual_user_id = uid
+        if not actual_user_id:
+            booking = sp.table("bookings").select("user_id").eq("id", booking_id).limit(1).execute()
+            if booking.data:
+                actual_user_id = booking.data[0]["user_id"]
+
+        if not actual_user_id:
             return None
+
         created = sp.table("chat_sessions").insert({
-            "user_id": booking.data[0]["user_id"],
+            "user_id": actual_user_id,
             "title": title,
         }).execute()
         return created.data[0]["id"] if created.data else None
@@ -53,16 +98,19 @@ def _get_chat_session(sp, booking_id: str, create: bool = False):
         return None
 
 
-def _load_persisted_chat(booking_id: str) -> List[Dict[str, Any]]:
-    """Load shared chat history; memory stays fallback when migration is absent."""
+def _load_persisted_chat(booking_id: str, doctor_id: Optional[str] = None, user_uuid: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Memuat seluruh riwayat chat konsultasi antara user dan dokter yang sama."""
     sp = get_supabase()
     if not sp:
         return []
+
+    conv_key, uid, pid, related_bids = _resolve_conversation_key(sp, booking_id, doctor_id, user_uuid)
+
     try:
         res = (
             sp.table("consultation_messages")
             .select("id, booking_id, sender_id, sender_name, sender_role, message, created_at")
-            .eq("booking_id", booking_id)
+            .in_("booking_id", related_bids)
             .order("created_at")
             .execute()
         )
@@ -71,9 +119,9 @@ def _load_persisted_chat(booking_id: str) -> List[Dict[str, Any]]:
     except Exception:
         pass
 
-    # Existing chat_messages table keeps chat shared even before SQL migration.
+    # Existing chat_messages table fallback
     try:
-        session_id = _get_chat_session(sp, booking_id)
+        session_id = _get_chat_session(sp, booking_id, create=False, doctor_id=doctor_id, user_uuid=user_uuid)
         if not session_id:
             return []
         res = (
@@ -97,7 +145,7 @@ def _load_persisted_chat(booking_id: str) -> List[Dict[str, Any]]:
         return []
 
 
-def _persist_chat_message(message: Dict[str, Any]) -> None:
+def _persist_chat_message(message: Dict[str, Any], doctor_id: Optional[str] = None, user_uuid: Optional[str] = None) -> None:
     sp = get_supabase()
     if not sp:
         return
@@ -108,7 +156,7 @@ def _persist_chat_message(message: Dict[str, Any]) -> None:
         pass
 
     try:
-        session_id = _get_chat_session(sp, message["booking_id"], create=True)
+        session_id = _get_chat_session(sp, message["booking_id"], create=True, doctor_id=doctor_id, user_uuid=user_uuid)
         if session_id:
             sp.table("chat_messages").insert({
                 "session_id": session_id,
@@ -408,13 +456,23 @@ def check_booking_status(booking_id: str):
 
 # 5. CHAT 1-ON-1 PASIEN & DOKTER
 @router.get("/chat/{booking_id}/messages")
-def get_doctor_chat_messages(booking_id: str):
-    """Mengambil pesan obrolan 1-on-1 untuk booking yang sudah lunas."""
-    persisted = _load_persisted_chat(booking_id)
+def get_doctor_chat_messages(
+    booking_id: str,
+    doctor_id: Optional[str] = None,
+    user_uuid: Optional[str] = None
+):
+    """Mengambil pesan obrolan 1-on-1 untuk booking yang sudah lunas (bersambung terus)."""
+    sp = get_supabase()
+    conv_key, _, _, _ = _resolve_conversation_key(sp, booking_id, doctor_id, user_uuid)
+
+    persisted = _load_persisted_chat(booking_id, doctor_id, user_uuid)
     if persisted:
+        _inmemory_doctor_chats[conv_key] = persisted
         _inmemory_doctor_chats[booking_id] = persisted
+    elif conv_key in _inmemory_doctor_chats and len(_inmemory_doctor_chats[conv_key]) > 0:
+        _inmemory_doctor_chats[booking_id] = _inmemory_doctor_chats[conv_key]
     elif booking_id not in _inmemory_doctor_chats:
-        _inmemory_doctor_chats[booking_id] = [
+        init_msgs = [
             {
                 "id": f"welcome_{booking_id}",
                 "booking_id": booking_id,
@@ -425,7 +483,10 @@ def get_doctor_chat_messages(booking_id: str):
                 "created_at": datetime.utcnow().isoformat()
             }
         ]
-    messages = _inmemory_doctor_chats[booking_id]
+        _inmemory_doctor_chats[conv_key] = init_msgs
+        _inmemory_doctor_chats[booking_id] = init_msgs
+
+    messages = _inmemory_doctor_chats.get(conv_key) or _inmemory_doctor_chats.get(booking_id, [])
     return {
         "booking_id": booking_id,
         "count": len(messages),
@@ -434,9 +495,12 @@ def get_doctor_chat_messages(booking_id: str):
 
 @router.post("/chat/{booking_id}/send")
 def send_doctor_message(booking_id: str, req: DoctorMessageRequest):
-    """Kirim pesan dalam ruang chat 1-on-1 dengan dokter."""
-    if booking_id not in _inmemory_doctor_chats:
-        _inmemory_doctor_chats[booking_id] = []
+    """Kirim pesan dalam ruang chat 1-on-1 dengan dokter (bersambung terus)."""
+    sp = get_supabase()
+    conv_key, _, _, _ = _resolve_conversation_key(sp, booking_id)
+
+    if conv_key not in _inmemory_doctor_chats:
+        _inmemory_doctor_chats[conv_key] = _inmemory_doctor_chats.get(booking_id, [])
 
     user_msg_id = str(uuid.uuid4())
     user_msg = {
@@ -448,7 +512,8 @@ def send_doctor_message(booking_id: str, req: DoctorMessageRequest):
         "message": req.message,
         "created_at": datetime.utcnow().isoformat()
     }
-    _inmemory_doctor_chats[booking_id].append(user_msg)
+    _inmemory_doctor_chats[conv_key].append(user_msg)
+    _inmemory_doctor_chats[booking_id] = _inmemory_doctor_chats[conv_key]
     _persist_chat_message(user_msg)
 
     return {
@@ -545,8 +610,15 @@ def get_user_active_sessions(user_uuid: str):
             user_id = u_res.data[0]["id"]
             res = sp.table("bookings").select("id, schedule_time, status, created_at, psychologists(*)").eq("user_id", user_id).eq("status", "confirmed").order("created_at", desc=True).execute()
             if res.data:
+                seen_doc_ids = set()
                 for b in res.data:
                     doc = dict(b.get("psychologists") or {})
+                    doc_id = str(doc.get("id", ""))
+                    if doc_id and doc_id in seen_doc_ids:
+                        continue
+                    if doc_id:
+                        seen_doc_ids.add(doc_id)
+
                     raw_cat = doc.get("category", "")
                     if raw_cat and isinstance(raw_cat, str) and raw_cat.strip().startswith("{"):
                         try:

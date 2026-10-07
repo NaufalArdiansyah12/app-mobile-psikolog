@@ -6,8 +6,13 @@ import 'checkout_payment_screen.dart';
 
 class DoctorDetailScreen extends StatefulWidget {
   final Map<String, dynamic> doctor;
+  final bool isRebooking;
 
-  const DoctorDetailScreen({super.key, required this.doctor});
+  const DoctorDetailScreen({
+    super.key,
+    required this.doctor,
+    this.isRebooking = false,
+  });
 
   @override
   State<DoctorDetailScreen> createState() => _DoctorDetailScreenState();
@@ -640,16 +645,20 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
                               ),
                               onPressed: isSlotDisabled
                                   ? null
-                                  : () {
-                                      Navigator.of(context).push(
+                                  : () async {
+                                      final result = await Navigator.of(context).push(
                                         MaterialPageRoute(
                                           builder: (_) => CheckoutPaymentScreen(
                                             doctor: _doctor,
                                             selectedDate: _selectedDate,
                                             selectedTime: _selectedTime,
+                                            isRebooking: widget.isRebooking,
                                           ),
                                         ),
                                       );
+                                      if (result != null && mounted) {
+                                        Navigator.of(context).pop(result);
+                                      }
                                     },
                               child: Text(
                                 buttonText,

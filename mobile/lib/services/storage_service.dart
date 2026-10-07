@@ -299,11 +299,17 @@ class StorageService {
     } catch (_) {}
   }
 
-  // Riwayat Chat Dokter per Booking ID
-  Future<List<Map<String, dynamic>>> getDoctorChat(String bookingId) async {
+  // Riwayat Chat Dokter per Booking ID dan Doctor ID (Bersambung)
+  Future<List<Map<String, dynamic>>> getDoctorChat(String bookingId, {String? doctorId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('mindpal_doc_chat_$bookingId');
+      String? raw;
+      if (doctorId != null && doctorId.isNotEmpty) {
+        raw = prefs.getString('mindpal_doc_chat_dr_$doctorId');
+      }
+      if ((raw == null || raw.isEmpty) && bookingId.isNotEmpty) {
+        raw = prefs.getString('mindpal_doc_chat_$bookingId');
+      }
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw) as List<dynamic>;
         return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -312,10 +318,14 @@ class StorageService {
     return [];
   }
 
-  Future<void> saveDoctorChat(String bookingId, List<Map<String, dynamic>> messages) async {
+  Future<void> saveDoctorChat(String bookingId, List<Map<String, dynamic>> messages, {String? doctorId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('mindpal_doc_chat_$bookingId', jsonEncode(messages));
+      final encoded = jsonEncode(messages);
+      await prefs.setString('mindpal_doc_chat_$bookingId', encoded);
+      if (doctorId != null && doctorId.isNotEmpty) {
+        await prefs.setString('mindpal_doc_chat_dr_$doctorId', encoded);
+      }
     } catch (_) {}
   }
 

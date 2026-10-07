@@ -8,12 +8,14 @@ class CheckoutPaymentScreen extends StatefulWidget {
   final Map<String, dynamic> doctor;
   final DateTime selectedDate;
   final String selectedTime;
+  final bool isRebooking;
 
   const CheckoutPaymentScreen({
     super.key,
     required this.doctor,
     required this.selectedDate,
     required this.selectedTime,
+    this.isRebooking = false,
   });
 
   @override
@@ -82,15 +84,32 @@ class _CheckoutPaymentScreenState extends State<CheckoutPaymentScreen> {
 
     if (chargeResult != null && chargeResult['status'] == 'success') {
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => PaymentInstructionScreen(
-            chargeData: chargeResult,
-            doctor: widget.doctor,
-            formattedSchedule: formattedSchedule,
+      if (widget.isRebooking) {
+        final result = await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PaymentInstructionScreen(
+              chargeData: chargeResult,
+              doctor: widget.doctor,
+              formattedSchedule: formattedSchedule,
+              isRebooking: true,
+            ),
           ),
-        ),
-      );
+        );
+        if (result != null && mounted) {
+          Navigator.of(context).pop(result);
+        }
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => PaymentInstructionScreen(
+              chargeData: chargeResult,
+              doctor: widget.doctor,
+              formattedSchedule: formattedSchedule,
+              isRebooking: false,
+            ),
+          ),
+        );
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
