@@ -154,9 +154,44 @@ class ApiService {
       final res = await http.get(Uri.parse('$baseUrl/api/consultation/psychologists'));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        return List<Map<String, dynamic>>.from(data['psychologists'] ?? []);
+        final list = List<Map<String, dynamic>>.from(data['psychologists'] ?? []);
+        if (list.isNotEmpty) return list;
       }
     } catch (_) {}
+
+    // Fallback direct Supabase
+    try {
+      const supabaseUrl = 'https://ydlzrtpdsqaobxidrjvc.supabase.co';
+      final supabaseServiceKey = _supabaseKey;
+      final res = await http.get(
+        Uri.parse('$supabaseUrl/rest/v1/psychologists?is_available=eq.true&select=*'),
+        headers: {
+          'apikey': supabaseServiceKey,
+          'Authorization': 'Bearer $supabaseServiceKey',
+        },
+      );
+      if (res.statusCode == 200) {
+        final list = jsonDecode(res.body) as List;
+        final result = <Map<String, dynamic>>[];
+        for (final item in list) {
+          final doc = Map<String, dynamic>.from(item as Map);
+          final rawCat = doc['category'];
+          if (rawCat is String && rawCat.trim().startsWith('{')) {
+            try {
+              final meta = jsonDecode(rawCat) as Map<String, dynamic>;
+              if (meta.containsKey('bio')) doc['bio'] = meta['bio'];
+              if (meta.containsKey('education')) doc['education'] = meta['education'];
+              if (meta.containsKey('str_number')) doc['str'] = meta['str_number'];
+              if (meta.containsKey('days')) doc['available_days'] = meta['days'];
+              if (meta.containsKey('slots')) doc['available_slots'] = meta['slots'];
+            } catch (_) {}
+          }
+          result.add(doc);
+        }
+        return result;
+      }
+    } catch (_) {}
+
     return [];
   }
 
@@ -1560,25 +1595,30 @@ class ApiService {
       if (userId == null || userId.isEmpty) return [];
 
       final res = await http.get(
-        Uri.parse('$supabaseUrl/rest/v1/bookings?user_id=eq.$userId&status=eq.confirmed&select=id,schedule_time,status,created_at,psychologists(id,name,role,hospital,price)&order=created_at.desc'),
+        Uri.parse('$supabaseUrl/rest/v1/bookings?user_id=eq.$userId&status=eq.confirmed&select=id,schedule_time,status,created_at,psychologists(*)&order=created_at.desc'),
         headers: headers,
       );
       if (res.statusCode == 200) {
         final list = jsonDecode(res.body) as List;
         final result = <Map<String, dynamic>>[];
         for (final item in list) {
-          final doc = (item['psychologists'] as Map<String, dynamic>?) ?? {};
+          final doc = Map<String, dynamic>.from((item['psychologists'] as Map?) ?? {});
+          final rawCat = doc['category'];
+          if (rawCat is String && rawCat.trim().startsWith('{')) {
+            try {
+              final meta = jsonDecode(rawCat) as Map<String, dynamic>;
+              if (meta.containsKey('bio')) doc['bio'] = meta['bio'];
+              if (meta.containsKey('education')) doc['education'] = meta['education'];
+              if (meta.containsKey('str_number')) doc['str'] = meta['str_number'];
+              if (meta.containsKey('days')) doc['available_days'] = meta['days'];
+              if (meta.containsKey('slots')) doc['available_slots'] = meta['slots'];
+            } catch (_) {}
+          }
           result.add({
             'booking_id': item['id'],
             'schedule_time': item['schedule_time'],
             'status': item['status'],
-            'doctor': {
-              'id': doc['id'] ?? 'psy_1',
-              'name': doc['name'] ?? 'dr. Nadia S., Sp.KJ',
-              'role': doc['role'] ?? 'Psikiater Klinis',
-              'hospital': doc['hospital'] ?? 'Havenly Telekonseling',
-              'price': doc['price'] ?? 'Rp 250.000',
-            }
+            'doctor': doc,
           });
         }
         return result;

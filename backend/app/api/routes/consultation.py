@@ -543,22 +543,34 @@ def get_user_active_sessions(user_uuid: str):
                 return {"user_uuid": user_uuid, "count": 0, "sessions": []}
 
             user_id = u_res.data[0]["id"]
-            res = sp.table("bookings").select("id, schedule_time, status, created_at, psychologists(id, name, role, hospital, price)").eq("user_id", user_id).eq("status", "confirmed").order("created_at", desc=True).execute()
+            res = sp.table("bookings").select("id, schedule_time, status, created_at, psychologists(*)").eq("user_id", user_id).eq("status", "confirmed").order("created_at", desc=True).execute()
             if res.data:
                 for b in res.data:
-                    doc = b.get("psychologists") or {}
+                    doc = dict(b.get("psychologists") or {})
+                    raw_cat = doc.get("category", "")
+                    if raw_cat and isinstance(raw_cat, str) and raw_cat.strip().startswith("{"):
+                        try:
+                            import json
+                            meta = json.loads(raw_cat)
+                            if "bio" in meta:
+                                doc["bio"] = meta["bio"]
+                            if "education" in meta:
+                                doc["education"] = meta["education"]
+                            if "str_number" in meta:
+                                doc["str"] = meta["str_number"]
+                            if "days" in meta:
+                                doc["available_days"] = meta["days"]
+                            if "slots" in meta:
+                                doc["available_slots"] = meta["slots"]
+                        except Exception:
+                            pass
+
                     active_sessions.append({
                         "booking_id": b.get("id"),
                         "schedule_time": b.get("schedule_time"),
                         "status": b.get("status"),
                         "created_at": b.get("created_at"),
-                        "doctor": {
-                            "id": doc.get("id", "psy_1"),
-                            "name": doc.get("name", "dr. Nadia S., Sp.KJ"),
-                            "role": doc.get("role", "Psikiater Klinis"),
-                            "hospital": doc.get("hospital", "Havenly Telekonseling"),
-                            "price": doc.get("price", "Rp 250.000")
-                        }
+                        "doctor": doc
                     })
             # Kembalikan data realtime dari Supabase
             return {"user_uuid": user_uuid, "count": len(active_sessions), "sessions": active_sessions}

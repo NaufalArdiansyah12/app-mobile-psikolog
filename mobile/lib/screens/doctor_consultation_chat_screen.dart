@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import 'doctor_detail_screen.dart';
 
 enum DoctorChatSessionStatus {
   upcoming,
@@ -400,6 +401,27 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
                               'Kirim Ulasan',
                               style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w800),
                             ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(modalCtx);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DoctorDetailScreen(doctor: widget.doctor),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.calendar_month_rounded, size: 16, color: Color(0xFF0D9488)),
+                    label: Text(
+                      'Booking Sesi Lanjutan dengan $docName',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0D9488),
+                      ),
                     ),
                   ),
                 ],
@@ -890,72 +912,110 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
           ] else ...[
             // Tampilan Tergembok saat Sesi Belum Mulai atau Selesai
             Container(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
               decoration: BoxDecoration(
                 color: sessionInfo.bgColor,
                 border: Border(top: BorderSide(color: sessionInfo.borderColor)),
               ),
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: sessionInfo.themeColor.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: sessionInfo.borderColor),
-                    ),
-                    child: Icon(sessionInfo.icon, color: sessionInfo.themeColor, size: 22),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: sessionInfo.themeColor.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: sessionInfo.borderColor),
+                        ),
+                        child: Icon(sessionInfo.icon, color: sessionInfo.themeColor, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Flexible(
-                              child: Text(
-                                'Ruang Chat Digembok',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w800,
-                                  color: sessionInfo.themeColor,
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    sessionInfo.status == DoctorChatSessionStatus.upcoming
+                                        ? 'Ruang Chat Belum Dimulai'
+                                        : 'Sesi Konsultasi Berakhir',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: sessionInfo.themeColor,
+                                    ),
+                                  ),
                                 ),
+                                const SizedBox(width: 6),
+                                Icon(Icons.lock_rounded, size: 14, color: sessionInfo.themeColor),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              sessionInfo.status == DoctorChatSessionStatus.upcoming
+                                  ? 'Fitur kirim pesan dibuka saat jam sesi: ${widget.scheduleTime}'
+                                  : 'Waktu konsultasi 2 jam telah selesai. Booking sesi baru untuk lanjut berkonsultasi.',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF64748B),
+                                height: 1.25,
                               ),
                             ),
-                            const SizedBox(width: 6),
-                            Icon(Icons.lock_rounded, size: 14, color: sessionInfo.themeColor),
                           ],
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          sessionInfo.status == DoctorChatSessionStatus.upcoming
-                              ? 'Fitur kirim pesan dibuka saat jam sesi: ${widget.scheduleTime}'
-                              : 'Waktu konsultasi 2 jam telah selesai. Riwayat chat bersifat hanya-baca.',
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFE2E8F0),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.lock_rounded, color: Color(0xFF94A3B8), size: 16),
+                      ),
+                    ],
+                  ),
+                  if (sessionInfo.status == DoctorChatSessionStatus.expired) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 44,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0D9488),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                        ),
+                        icon: const Icon(Icons.calendar_month_rounded, size: 18),
+                        label: Text(
+                          'Booking Ulang Sesi Lanjutan',
                           style: GoogleFonts.plusJakartaSans(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF64748B),
-                            height: 1.25,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
-                      ],
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DoctorDetailScreen(doctor: widget.doctor),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE2E8F0),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.lock_rounded, color: Color(0xFF94A3B8), size: 18),
-                  ),
+                  ],
                 ],
               ),
             ),

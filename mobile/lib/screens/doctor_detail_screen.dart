@@ -26,6 +26,7 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
   bool _isLoadingReviews = true;
   double? _liveRating;
   int _totalReviewCount = 0;
+  late Map<String, dynamic> _doctor;
 
   final List<String> _timeSlots = [];
 
@@ -67,7 +68,7 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
   };
 
   List<String> get _doctorAvailableDays {
-    final raw = widget.doctor['available_days'] ?? widget.doctor['days'];
+    final raw = _doctor['available_days'] ?? _doctor['days'];
     if (raw is List && raw.isNotEmpty) {
       return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
     } else if (raw is String && raw.trim().startsWith('[')) {
@@ -82,7 +83,7 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
   }
 
   List<String> _extractDoctorSlots() {
-    final raw = widget.doctor['available_slots'] ?? widget.doctor['slots'];
+    final raw = _doctor['available_slots'] ?? _doctor['slots'];
     List<String> result = [];
     if (raw is List && raw.isNotEmpty) {
       result = raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
@@ -133,6 +134,7 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
   @override
   void initState() {
     super.initState();
+    _doctor = Map<String, dynamic>.from(widget.doctor);
     _tabController = TabController(length: 4, vsync: this);
     final now = DateTime.now();
     _currentMonth = DateTime(now.year, now.month, 1);
@@ -147,12 +149,36 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
 
     _selectedDate = _findFirstAvailableDate(now);
 
+    _loadDoctorProfile();
     _loadBookedSchedules();
     _loadReviews();
   }
 
+  void _loadDoctorProfile() async {
+    final docId = _doctor['id']?.toString() ?? 'psy_1';
+    final psychologists = await _apiService.getPsychologists();
+    final matched = psychologists.firstWhere(
+      (p) => p['id']?.toString() == docId,
+      orElse: () => {},
+    );
+    if (matched.isNotEmpty && mounted) {
+      setState(() {
+        _doctor = Map<String, dynamic>.from(matched);
+        final parsedSlots = _extractDoctorSlots();
+        _timeSlots.clear();
+        _timeSlots.addAll(parsedSlots);
+        if (_timeSlots.isNotEmpty && !_timeSlots.contains(_selectedTime)) {
+          _selectedTime = _timeSlots.first;
+        }
+        if (!_isDoctorPracticeDay(_selectedDate) || _isDayFull(_selectedDate)) {
+          _selectedDate = _findFirstAvailableDate(DateTime.now());
+        }
+      });
+    }
+  }
+
   void _loadReviews() async {
-    final docId = widget.doctor['id']?.toString() ?? 'psy_1';
+    final docId = _doctor['id']?.toString() ?? 'psy_1';
     final res = await _apiService.getDoctorReviews(docId);
     if (!mounted) return;
     setState(() {
@@ -167,7 +193,7 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
   }
 
   void _loadBookedSchedules() async {
-    final docId = widget.doctor['id']?.toString() ?? 'psy_1';
+    final docId = _doctor['id']?.toString() ?? 'psy_1';
     final schedules = await _apiService.getDoctorBookedSchedules(docId);
     if (!mounted) return;
     setState(() {
@@ -328,7 +354,7 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
 
   @override
   Widget build(BuildContext context) {
-    final doc = widget.doctor;
+    final doc = _doctor;
     final String name = doc['name'] ?? '-';
     final String role = doc['role'] ?? '-';
     final String fee = (doc['fee'] ?? doc['price'] ?? '').toString().isNotEmpty
@@ -618,7 +644,7 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
                                       Navigator.of(context).push(
                                         MaterialPageRoute(
                                           builder: (_) => CheckoutPaymentScreen(
-                                            doctor: widget.doctor,
+                                            doctor: _doctor,
                                             selectedDate: _selectedDate,
                                             selectedTime: _selectedTime,
                                           ),
