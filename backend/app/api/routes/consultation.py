@@ -271,13 +271,19 @@ def charge_payment(req: ChargeRequest):
                 psy_res = sp.table("psychologists").select("id").limit(1).execute()
                 if psy_res.data:
                     psy_id = psy_res.data[0]["id"]
-            sp_booking = sp.table("bookings").insert({
+            insert_booking_data = {
                 "id": booking_id,
                 "user_id": user_id,
                 "psychologist_id": psy_id,
                 "schedule_time": req.schedule_time,
                 "status": "pending"
-            }).execute()
+            }
+            if req.notes:
+                insert_booking_data["notes"] = req.notes
+            if req.ai_screening:
+                insert_booking_data["ai_screening"] = req.ai_screening
+
+            sp_booking = sp.table("bookings").insert(insert_booking_data).execute()
             if sp_booking.data:
                 booking_id = sp_booking.data[0].get("id", booking_id)
         except Exception as e:
@@ -299,6 +305,8 @@ def charge_payment(req: ChargeRequest):
         "biller_code": charge_result.get("biller_code", ""),
         "qr_code_url": charge_result.get("qr_code_url", ""),
         "status": "pending",
+        "notes": req.notes,
+        "ai_screening": req.ai_screening,
         "created_at": datetime.utcnow().isoformat()
     }
 
@@ -309,6 +317,8 @@ def charge_payment(req: ChargeRequest):
         "user_uuid": req.user_uuid,
         "psychologist_id": req.psychologist_id,
         "schedule_time": req.schedule_time,
+        "notes": req.notes,
+        "ai_screening": req.ai_screening,
         "status": "pending"
     })
 
@@ -532,12 +542,18 @@ def create_booking(booking: BookingRequest):
     if sp:
         try:
             user_id = _ensure_user(sp, booking.user_uuid)
-            res = sp.table("bookings").insert({
+            insert_data = {
                 "user_id": user_id,
                 "psychologist_id": booking.psychologist_id,
                 "schedule_time": booking.schedule_time,
                 "status": "confirmed"
-            }).execute()
+            }
+            if booking.notes:
+                insert_data["notes"] = booking.notes
+            if booking.ai_screening:
+                insert_data["ai_screening"] = booking.ai_screening
+
+            res = sp.table("bookings").insert(insert_data).execute()
             return {"status": "success", "booking": res.data}
         except Exception as e:
             print(f"Supabase booking failed: {e}")

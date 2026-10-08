@@ -8,6 +8,7 @@ from app.models.schemas import (
     UpdateDoctorStatusRequest,
     UpdateDoctorProfileRequest,
 )
+from app.api.routes.consultation import _inmemory_bookings
 
 router = APIRouter(prefix="/doctor", tags=["Dokter & Tenaga Ahli"])
 
@@ -290,11 +291,28 @@ def get_doctor_bookings(doctor_id: str = "psy_1"):
                         "schedule_time": b.get("schedule_time") or "Jadwal belum ditentukan",
                         "notes": b.get("notes") or "Konsultasi keluhan kesehatan mental.",
                         "status": (b.get("status") or "pending").lower(),
+                        "ai_screening": b.get("ai_screening"),
                         "created_at": b.get("created_at")
                     })
                 return {"count": len(formatted), "bookings": formatted}
         except Exception as e:
             print(f"Supabase query doctor bookings failed: {e}")
+
+    # Fallback ke in-memory jika Supabase offline atau kosong
+    if _inmemory_bookings:
+        formatted = []
+        for b in _inmemory_bookings:
+            formatted.append({
+                "id": b.get("id"),
+                "user_id": b.get("user_uuid") or b.get("user_id"),
+                "patient_name": "Pasien MindPal",
+                "schedule_time": b.get("schedule_time") or "Jadwal belum ditentukan",
+                "notes": b.get("notes") or "Konsultasi keluhan kesehatan mental.",
+                "status": (b.get("status") or "pending").lower(),
+                "ai_screening": b.get("ai_screening"),
+                "created_at": b.get("created_at")
+            })
+        return {"count": len(formatted), "bookings": formatted}
 
     return {"count": 0, "bookings": []}
 

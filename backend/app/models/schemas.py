@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 class ChatMessage(BaseModel):
@@ -22,6 +22,8 @@ class BookingRequest(BaseModel):
     user_uuid: str
     psychologist_id: str
     schedule_time: str
+    notes: Optional[str] = None
+    ai_screening: Optional[Dict[str, Any]] = None
 
 class ChatAnalyzeRequest(BaseModel):
     user_uuid: str
@@ -93,6 +95,7 @@ class ChargeRequest(BaseModel):
     bank: Optional[str] = "bca" # bca, bni, bri, mandiri
     gross_amount: int = 250000
     notes: Optional[str] = None
+    ai_screening: Optional[Dict[str, Any]] = None
 
 class DoctorReviewRequest(BaseModel):
     booking_id: str

@@ -78,8 +78,11 @@ create table if not exists bookings (
     schedule_time text not null,
     notes text,
     status text default 'pending' check (status in ('pending', 'confirmed', 'completed', 'cancelled')),
+    ai_screening jsonb,
     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+alter table bookings add column if not exists ai_screening jsonb;
 
 -- Chat konsultasi dokter-pasien, terikat ke booking
 create table if not exists consultation_messages (
