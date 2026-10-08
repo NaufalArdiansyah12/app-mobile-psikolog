@@ -1,27 +1,45 @@
-# mobile
+# Havenly Mobile Client
 
-MindPal Flutter client.
+Aplikasi mobile Flutter cross-platform (Android & iOS) untuk **Havenly** — platform kesehatan mental holistik, konseling AI CBT, dan telekonseling 1-on-1 dengan dokter & psikolog.
 
-## Image attribution
+---
 
-3D illustrations used in onboarding come from [Thiings](https://www.thiings.co/):
+## Arsitektur Fitur
 
-- [Chat Bubble](https://www.thiings.co/things/chat-bubble)
-- [Meditation](https://www.thiings.co/things/meditation)
-- [Blue Shield](https://www.thiings.co/things/blue-shield)
+1. **Role Pasien (Sobat Havenly)**:
+   - **Beranda (HomeScreen)**: Latihan pernapasan interaktif (*Breathing Bubble*), teknik grounding 5-4-3-2-1, artikel rekomendasi, katalog dokter terpopuler.
+   - **Jurnal & Mood (MoodScreen)**: Catatan harian emosi, pemilihan pemicu (*triggers*), statistik grafik suasana hati yang tersinkron otomatis ke Supabase.
+   - **Havenly AI (ChatScreen)**: Konseling chat interaktif berbasis Cognitive Behavioral Therapy (CBT) dengan streaming real-time & interseptor darurat krisis.
+   - **Telekonsultasi (ConsultationScreen)**: Pemilihan dokter/psikolog spesialis, screening kuesioner awal AI, integrasi pembayaran Midtrans Sandbox.
+   - **Chat Dokter**: Konsultasi chat privat 1-on-1 dengan riwayat tersimpan permanen.
+   - **Profil Pengguna (SettingsScreen)**: Ganti nama, bio, dan upload foto profil/avatar langsung ke server cloud.
 
-Free downloads are subject to Thiings' personal, non-commercial license and require attribution. Review Thiings' [Terms of Service](https://www.thiings.co/terms) before commercial release.
+2. **Role Dokter / Tenaga Ahli**:
+   - **Portal Dokter (DoctorMainScreen)**: Beralih antarmuka otomatis saat login sebagai akun dokter.
+   - **Daftar Booking & Pasien**: Manajemen jadwal konsultasi, persetujuan booking, serta peninjauan hasil screening AI pra-sesi pasien.
+   - **Chat Pasien**: Komunikasi langsung dengan pasien dan fitur penyelesaian sesi.
+   - **Pengaturan Praktik**: Atur ketersediaan hari praktik, slot jam sesi, tarif konsultasi, STR, dan profil tenaga medis.
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+## Menjalankan Aplikasi
 
-A few resources to get you started if this is your first Flutter project:
+```bash
+flutter pub get
+flutter run
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+### Konfigurasi Endpoint:
+Konfigurasi URL backend berada pada file `lib/services/api_service.dart`:
+- Android Emulator: `http://10.0.2.2:8000`
+- iOS Simulator / Desktop Web: `http://localhost:8000`
+- Perangkat Fisik (HP): Gunakan IP LAN komputer host (contoh: `http://192.168.1.xxx:8000`)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+---
+
+## Analisa & Pengujian
+
+```bash
+flutter analyze
+flutter test
+```
