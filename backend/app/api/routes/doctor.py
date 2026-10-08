@@ -1,6 +1,8 @@
 import json
-from fastapi import APIRouter, HTTPException, status
+from typing import Optional
+from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form
 from app.core.database import get_supabase
+from app.admin.utils.storage import save_image_upload
 from app.models.schemas import (
     UpdateBookingStatusRequest,
     UpdateDoctorStatusRequest,
@@ -21,6 +23,7 @@ def get_doctor_dashboard(doctor_id: str):
     hospital = "RS Mitra Sehat Jakarta"
     price = "Rp 250.000"
     is_available = True
+    avatar = None
     total_consultations = 0
     today_sessions = 0
     completed_sessions = 0
@@ -51,6 +54,8 @@ def get_doctor_dashboard(doctor_id: str):
                 price = psy.get("price", price)
                 rating = float(psy.get("rating", 5.0))
                 is_available = psy.get("is_available", True)
+                if psy.get("avatar"):
+                    avatar = psy.get("avatar")
 
                 # Baca kolom resmi bila ada
                 if psy.get("bio"):
@@ -69,6 +74,8 @@ def get_doctor_dashboard(doctor_id: str):
                 if raw_cat and isinstance(raw_cat, str) and raw_cat.strip().startswith("{"):
                     try:
                         parsed_meta = json.loads(raw_cat)
+                        if not avatar and parsed_meta.get("avatar"):
+                            avatar = parsed_meta.get("avatar")
                         if not psy.get("bio") and parsed_meta.get("bio"):
                             bio = parsed_meta.get("bio")
                         if not psy.get("education") and parsed_meta.get("education"):
@@ -126,6 +133,7 @@ def get_doctor_dashboard(doctor_id: str):
         "hospital": hospital,
         "price": price,
         "rating": rating,
+        "avatar": avatar,
         "total_consultations": total_consultations,
         "today_sessions": today_sessions,
         "is_available": is_available,
@@ -137,10 +145,53 @@ def get_doctor_dashboard(doctor_id: str):
         "available_slots": available_slots,
     }
 
+@router.post("/upload-avatar")
+async def upload_doctor_avatar(
+    file: UploadFile = File(...),
+    doctor_id: Optional[str] = Form(None)
+):
+    """Upload foto profil dokter dan update ke Supabase database."""
+    try:
+        relative_url = await save_image_upload(file, subfolder="avatars")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    sp = get_supabase()
+    if sp and relative_url:
+        update_data = {"avatar": relative_url}
+        meta = {"avatar": relative_url}
+        try:
+            # 1. Update ke kolom avatar resmi
+            if doctor_id and doctor_id != "psy_1" and len(doctor_id) > 10:
+                sp.table("psychologists").update(update_data).eq("id", doctor_id).execute()
+            else:
+                sp.table("psychologists").update(update_data).ilike("name", "%Nadia%").execute()
+        except Exception as e:
+            # 2. Fallback update metadata category jika kolom avatar belum ada
+            try:
+                # Ambil metadata category existing
+                res = sp.table("psychologists").select("category").limit(1).execute()
+                cat_dict = {}
+                if res.data and res.data[0].get("category"):
+                    try:
+                        cat_dict = json.loads(res.data[0]["category"])
+                    except Exception:
+                        pass
+                cat_dict["avatar"] = relative_url
+                sp.table("psychologists").update({"category": json.dumps(cat_dict)}).ilike("name", "%Nadia%").execute()
+            except Exception:
+                pass
+
+    return {
+        "status": "success",
+        "avatar_url": relative_url,
+        "message": "Foto profil dokter berhasil diunggah dan disimpan."
+    }
+
 @router.put("/profile")
 @router.patch("/profile")
 def update_doctor_profile(req: UpdateDoctorProfileRequest):
-    """Dokter menyimpan perubahan jadwal, jam sesi, tarif, bio & kredensial ke Supabase DB."""
+    """Dokter menyimpan perubahan jadwal, jam sesi, tarif, bio, foto avatar & kredensial ke Supabase DB."""
     sp = get_supabase()
     update_data = {}
 
@@ -156,8 +207,10 @@ def update_doctor_profile(req: UpdateDoctorProfileRequest):
         update_data["hospital"] = req.hospital
     if req.is_available is not None:
         update_data["is_available"] = req.is_available
+    if req.avatar is not None:
+        update_data["avatar"] = req.avatar
 
-    # Pack extra schedule & bio metadata into category JSON as backup
+    # Pack extra schedule & bio & avatar metadata into category JSON as backup
     meta = {
         "bio": req.bio or "Spesialis dalam farmakoterapi dan psikoterapi suportif untuk kasus gangguan suasana hati.",
         "education": req.education or "Spesialis Kedokteran Jiwa - FK Universitas Indonesia",
@@ -165,6 +218,8 @@ def update_doctor_profile(req: UpdateDoctorProfileRequest):
         "days": req.available_days or ["Senin", "Selasa", "Rabu", "Kamis"],
         "slots": req.available_slots or ["09:00 - 10:00", "13:00 - 14:00", "16:00 - 17:00", "19:00 - 20:00"],
     }
+    if req.avatar is not None:
+        meta["avatar"] = req.avatar
     update_data["category"] = json.dumps(meta)
 
     # Dedicated official columns
@@ -199,7 +254,7 @@ def update_doctor_profile(req: UpdateDoctorProfileRequest):
             try:
                 fallback_data = {
                     k: v for k, v in update_data.items()
-                    if k in ("name", "role", "price", "experience", "hospital", "is_available", "category")
+                    if k in ("name", "role", "price", "experience", "hospital", "is_available", "category", "avatar")
                 }
                 if req.doctor_id and req.doctor_id != "psy_1" and len(req.doctor_id) > 10:
                     res = sp.table("psychologists").update(fallback_data).eq("id", req.doctor_id).execute()

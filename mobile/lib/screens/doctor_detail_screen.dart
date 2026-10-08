@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
+import '../widgets/doctor_avatar.dart';
 import 'checkout_payment_screen.dart';
 
 class DoctorDetailScreen extends StatefulWidget {
@@ -448,32 +449,10 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> with SingleTick
                   // Avatar & Info Dokter
                   Row(
                     children: [
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white,
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 2.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 10,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: ClipOval(
-                          child: Image.asset(
-                            'assets/gambar_home.jpeg',
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => const Icon(
-                              Icons.person_rounded,
-                              color: primaryTeal,
-                              size: 40,
-                            ),
-                          ),
-                        ),
+                      DoctorAvatar(
+                        doctor: widget.doctor,
+                        size: 72,
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 2.5),
                       ),
                       const SizedBox(width: 14),
                       Expanded(

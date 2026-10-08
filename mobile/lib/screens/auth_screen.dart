@@ -18,7 +18,6 @@ class _AuthScreenState extends State<AuthScreen> {
   final ApiService _api = ApiService();
 
   bool _isLogin = true; // true = Login, false = Sign Up
-  String _selectedRole = 'user'; // 'user' or 'doctor'
   bool _obscurePassword = true;
   bool _agreeTerms = true;
   bool _isLoading = false;
@@ -93,13 +92,13 @@ class _AuthScreenState extends State<AuthScreen> {
           email: email,
           password: password,
           name: name,
-          role: _selectedRole,
+          role: 'user',
         );
         if (!mounted) return;
         setState(() => _isLoading = false);
 
         if (res.success && res.userId != null) {
-          final effectiveRole = res.role.isNotEmpty ? res.role : _selectedRole;
+          final effectiveRole = res.role.isNotEmpty ? res.role : 'user';
           await _storage.saveUserSession(
             userId: res.userId!,
             email: res.email ?? email,
@@ -292,109 +291,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
               const SizedBox(height: 24),
 
-              // Role Selector Toggle hanya untuk Pendaftaran Akun Baru
-              if (!_isLogin) ...[
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedRole = 'user';
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(
-                              color: _selectedRole == 'user' ? Colors.white : Colors.transparent,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: _selectedRole == 'user'
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.06),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      )
-                                    ]
-                                  : null,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.person_outline,
-                                  size: 18,
-                                  color: _selectedRole == 'user' ? primaryTeal : const Color(0xFF64748B),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  "Pasien",
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 13,
-                                    fontWeight: _selectedRole == 'user' ? FontWeight.bold : FontWeight.w600,
-                                    color: _selectedRole == 'user' ? const Color(0xFF0F172A) : const Color(0xFF64748B),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedRole = 'doctor';
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(
-                              color: _selectedRole == 'doctor' ? Colors.white : Colors.transparent,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: _selectedRole == 'doctor'
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.06),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      )
-                                    ]
-                                  : null,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.medical_services_outlined,
-                                  size: 18,
-                                  color: _selectedRole == 'doctor' ? primaryTeal : const Color(0xFF64748B),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  "Dokter / Ahli",
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 13,
-                                    fontWeight: _selectedRole == 'doctor' ? FontWeight.bold : FontWeight.w600,
-                                    color: _selectedRole == 'doctor' ? const Color(0xFF0F172A) : const Color(0xFF64748B),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 18),
-              ] else ...[
+              if (_isLogin) ...[
                 // Banner Pintasan Akun Demo Dokter untuk Pengujian
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

@@ -54,6 +54,7 @@ create table if not exists psychologists (
     category text not null,
     hospital text not null,
     is_available boolean default true,
+    avatar text,
     bio text,
     education text,
     str_number text,
@@ -63,6 +64,7 @@ create table if not exists psychologists (
 );
 
 -- Migrasi kolom baru jika tabel sudah ada sebelumnya:
+alter table psychologists add column if not exists avatar text;
 alter table psychologists add column if not exists bio text;
 alter table psychologists add column if not exists education text;
 alter table psychologists add column if not exists str_number text;

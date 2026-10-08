@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/doctor_avatar.dart';
 import 'doctor_detail_screen.dart';
 import 'doctor_consultation_chat_screen.dart';
 
@@ -738,28 +739,9 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isUpcoming
-                            ? const Color(0xFFFEF3C7)
-                            : isExpired
-                                ? const Color(0xFFF1F5F9)
-                                : const Color(0xFFCCFBF1),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          Icons.medical_services_rounded,
-                          color: isUpcoming
-                              ? const Color(0xFFD97706)
-                              : isExpired
-                                  ? const Color(0xFF64748B)
-                                  : const Color(0xFF0D9488),
-                          size: 24,
-                        ),
-                      ),
+                    DoctorAvatar(
+                      doctor: doc,
+                      size: 48,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -939,15 +921,9 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFCCFBF1),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFF99F6E4)),
-                  ),
-                  child: const Icon(Icons.person_rounded, color: Color(0xFF0D9488), size: 28),
+                DoctorAvatar(
+                  doctor: doc,
+                  size: 52,
                 ),
                 const SizedBox(width: 14),
                 Expanded(

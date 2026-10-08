@@ -74,6 +74,7 @@ class UpdateDoctorProfileRequest(BaseModel):
     doctor_id: Optional[str] = None
     name: Optional[str] = None
     role: Optional[str] = None
+    avatar: Optional[str] = None
     price: Optional[str] = None
     experience: Optional[str] = None
     hospital: Optional[str] = None

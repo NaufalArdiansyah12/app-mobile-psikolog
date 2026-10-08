@@ -28,6 +28,7 @@ class ChatScreenState extends State<ChatScreen> {
   final StorageService _storage = StorageService();
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _focusNode = FocusNode();
 
   final List<ChatMessage> _messages = [];
   List<String> _suggestedChips = [
@@ -59,10 +60,18 @@ class ChatScreenState extends State<ChatScreen> {
     _loadUser();
   }
 
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _textController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   void _loadUser() async {
     final uuid = await _storage.getOrCreateUserUuid();
     final name = await _storage.getNickname();
-    final avatar = await _storage.getUserAvatar();
+    final avatar = await _storage.getUserAvatar(userUuid: uuid);
     if (mounted) {
       setState(() {
         _userUuid = uuid;
@@ -222,28 +231,50 @@ class ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // Simpan sesi ke riwayat & minta analisis AI (async, tidak blocking UI)
+  // Simpan sesi ke riwayat secara instan & minta analisis AI di background (non-blocking)
   Future<void> _saveCurrentSession() async {
     final userMessages = _messages.where((m) => m.role == 'user').toList();
     if (userMessages.isEmpty) return;
-    final analysis = await _apiService.analyzeChatSession(
-      userUuid: _userUuid,
-      messages: _messages.where((m) => m.content.isNotEmpty).toList(),
-    );
+
+    final validMessages = List<ChatMessage>.from(_messages.where((m) => m.content.isNotEmpty));
+    final sessionId = _currentSessionId;
+    final sessionUuid = _userUuid;
+
+    // 1. Simpan langsung ke penyimpanan lokal agar instan & data tidak hilang
     final session = ChatSession(
-      id: _currentSessionId,
-      messages: List.from(_messages.where((m) => m.content.isNotEmpty)),
-      analysis: analysis,
+      id: sessionId,
+      messages: validMessages,
+      analysis: null,
     );
     await _storage.saveChatSession(session);
     if (mounted) {
       setState(() => _hasUnsavedMessages = false);
     }
+
+    // 2. Analisis AI dijalankan di background lalu memperbarui sesi di storage
+    _apiService.analyzeChatSession(
+      userUuid: sessionUuid,
+      messages: validMessages,
+    ).then((analysis) async {
+      if (analysis != null) {
+        final updatedSession = ChatSession(
+          id: sessionId,
+          messages: validMessages,
+          analysis: analysis,
+        );
+        await _storage.saveChatSession(updatedSession);
+      }
+    }).catchError((_) {});
   }
 
   // Dialog konfirmasi saat berpindah halaman jika chat belum disimpan
   Future<bool> confirmExitIfUnsaved() async {
     if (!hasUnsavedMessages) return true;
+
+    // Tutup keyboard dan cabut fokus input agar keyboard tidak muncul
+    _focusNode.unfocus();
+    FocusScope.of(context).unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
 
     final result = await showDialog<String>(
       context: context,
@@ -276,7 +307,11 @@ class ChatScreenState extends State<ChatScreen> {
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, 'cancel'),
+            onPressed: () {
+              _focusNode.unfocus();
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.pop(ctx, 'cancel');
+            },
             child: Text(
               "Batal",
               style: GoogleFonts.plusJakartaSans(
@@ -286,7 +321,11 @@ class ChatScreenState extends State<ChatScreen> {
             ),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, 'discard'),
+            onPressed: () {
+              _focusNode.unfocus();
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.pop(ctx, 'discard');
+            },
             child: Text(
               "Tidak",
               style: GoogleFonts.plusJakartaSans(
@@ -303,7 +342,11 @@ class ChatScreenState extends State<ChatScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             ),
-            onPressed: () => Navigator.pop(ctx, 'save'),
+            onPressed: () {
+              _focusNode.unfocus();
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.pop(ctx, 'save');
+            },
             child: Text(
               "Simpan",
               style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
@@ -313,12 +356,18 @@ class ChatScreenState extends State<ChatScreen> {
       ),
     );
 
+    // Pastikan fokus tetap bersih setelah dialog ditutup
+    _focusNode.unfocus();
+    FocusScope.of(context).unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+
     if (result == 'save') {
+      await _saveCurrentSession();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              "Menganalisis emosi dan menyimpan ke Jurnal...",
+              "Percakapan berhasil disimpan ke Jurnal.",
               style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
             ),
             duration: const Duration(seconds: 2),
@@ -326,9 +375,6 @@ class ChatScreenState extends State<ChatScreen> {
             backgroundColor: const Color(0xFF0F172A),
           ),
         );
-      }
-      await _saveCurrentSession();
-      if (mounted) {
         setState(() {
           _currentSessionId = const Uuid().v4();
           _messages.clear();
@@ -388,6 +434,10 @@ class ChatScreenState extends State<ChatScreen> {
   }
 
   void _resetConversation() {
+    _focusNode.unfocus();
+    FocusScope.of(context).unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+
     final hasUserMsg = _messages.any((m) => m.role == 'user');
     showDialog(
       context: context,
@@ -405,7 +455,11 @@ class ChatScreenState extends State<ChatScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () {
+              _focusNode.unfocus();
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.pop(ctx);
+            },
             child: Text("Batal", style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B))),
           ),
           ElevatedButton(
@@ -415,32 +469,38 @@ class ChatScreenState extends State<ChatScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
             onPressed: () async {
+              _focusNode.unfocus();
+              FocusManager.instance.primaryFocus?.unfocus();
               Navigator.pop(ctx);
               if (hasUserMsg) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      "Menganalisis dan menyimpan sesi ke Jurnal...",
-                      style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-                    ),
-                    duration: const Duration(seconds: 2),
-                    backgroundColor: const Color(0xFF0F172A),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
                 await _saveCurrentSession();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        "Sesi berhasil disimpan ke Jurnal.",
+                        style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+                      ),
+                      duration: const Duration(seconds: 2),
+                      backgroundColor: const Color(0xFF0F172A),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
               }
-              setState(() {
-                _currentSessionId = const Uuid().v4();
-                _messages.clear();
-                _messages.add(
-                  ChatMessage(
-                    role: 'assistant',
-                    content: "Sesi baru dimulai. Apa yang ingin kamu bicarakan sekarang?",
-                  ),
-                );
-                _hasUnsavedMessages = false;
-              });
+              if (mounted) {
+                setState(() {
+                  _currentSessionId = const Uuid().v4();
+                  _messages.clear();
+                  _messages.add(
+                    ChatMessage(
+                      role: 'assistant',
+                      content: "Sesi baru dimulai. Apa yang ingin kamu bicarakan sekarang?",
+                    ),
+                  );
+                  _hasUnsavedMessages = false;
+                });
+              }
             },
             child: Text("Selesai & Simpan", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
           ),
@@ -877,6 +937,7 @@ class ChatScreenState extends State<ChatScreen> {
                       Expanded(
                         child: TextField(
                           controller: _textController,
+                          focusNode: _focusNode,
                           minLines: 1,
                           maxLines: 3,
                           style: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: const Color(0xFF0F172A)),

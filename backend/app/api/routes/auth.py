@@ -58,7 +58,8 @@ def register(req: RegisterRequest):
     if admin_sp:
         try:
             # 1. Buat user via Supabase Auth Admin (auto-confirm email)
-            role = req.role if req.role in ("user", "doctor") else "user"
+            # Registrasi umum hanya untuk user/pasien; dokter hanya dapat ditambahkan admin
+            role = "user"
             auth_user = admin_sp.auth.admin.create_user({
                 "email": email,
                 "password": password,
@@ -129,14 +130,14 @@ def register(req: RegisterRequest):
         )
 
     user_id = str(uuid.uuid4())
-    role = req.role if req.role in ("user", "doctor") else "user"
+    role = "user"
     _inmemory_users[email] = {
         "id": user_id,
         "email": email,
         "password": password,
         "nickname": name,
         "role": role,
-        "psychologist_id": "psy_1" if role == "doctor" else None
+        "psychologist_id": None
     }
 
     return AuthResponse(
@@ -145,7 +146,7 @@ def register(req: RegisterRequest):
         email=email,
         nickname=name,
         role=role,
-        psychologist_id="psy_1" if role == "doctor" else None,
+        psychologist_id=None,
         token=f"mock_token_{user_id}",
         message="Pendaftaran berhasil (mode dev)."
     )

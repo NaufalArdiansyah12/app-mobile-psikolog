@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../widgets/doctor_avatar.dart';
 import 'doctor_detail_screen.dart';
 
 enum DoctorChatSessionStatus {
@@ -609,16 +610,9 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
           children: [
             Stack(
               children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: sessionInfo.themeColor,
-                  ),
-                  child: const Center(
-                    child: Icon(Icons.medical_services_rounded, color: Colors.white, size: 20),
-                  ),
+                DoctorAvatar(
+                  doctor: _doctor,
+                  size: 38,
                 ),
                 Positioned(
                   bottom: 0,
@@ -818,14 +812,9 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 if (isDoctor) ...[
-                                  Container(
-                                    width: 32,
-                                    height: 32,
-                                    decoration: const BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Color(0xFF0D9488),
-                                    ),
-                                    child: const Icon(Icons.medical_services_rounded, color: Colors.white, size: 16),
+                                  DoctorAvatar(
+                                    doctor: _doctor,
+                                    size: 32,
                                   ),
                                   const SizedBox(width: 8),
                                 ],

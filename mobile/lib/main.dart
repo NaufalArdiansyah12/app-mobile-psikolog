@@ -18,7 +18,9 @@ import 'widgets/notification_panel.dart';
 import 'widgets/breathing_bubble_widget.dart';
 import 'widgets/grounding_widget.dart';
 import 'widgets/daily_mood_dialog.dart';
+import 'widgets/doctor_avatar.dart';
 import 'services/storage_service.dart';
+import 'services/api_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -95,10 +97,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   void _onTabSelected(int index) async {
     if (_currentIndex == index) return;
 
+    FocusManager.instance.primaryFocus?.unfocus();
+
     if (_currentIndex == 2 && (_chatKey.currentState?.hasUnsavedMessages ?? false)) {
       final shouldProceed = await _chatKey.currentState?.confirmExitIfUnsaved();
       if (shouldProceed != true) return;
     }
+
+    FocusManager.instance.primaryFocus?.unfocus();
 
     setState(() => _currentIndex = index);
     if (index == 0) {
@@ -116,15 +122,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
+        FocusManager.instance.primaryFocus?.unfocus();
         if (_currentIndex == 2 && (_chatKey.currentState?.hasUnsavedMessages ?? false)) {
           final shouldProceed = await _chatKey.currentState?.confirmExitIfUnsaved();
           if (shouldProceed == true) {
+            FocusManager.instance.primaryFocus?.unfocus();
             setState(() => _currentIndex = 0);
             _homeKey.currentState?.loadMoodData();
           }
           return;
         }
         if (_currentIndex != 0) {
+          FocusManager.instance.primaryFocus?.unfocus();
           setState(() => _currentIndex = 0);
           _homeKey.currentState?.loadMoodData();
         } else {
@@ -283,6 +292,7 @@ class HomeScreen extends StatefulWidget {
 
 class HomeScreenState extends State<HomeScreen> {
   final StorageService _storage = StorageService();
+  final ApiService _api = ApiService();
   String _nickname = 'Sobat';
   int _bannerIndex = 0;
   final PageController _bannerController = PageController();
@@ -316,7 +326,7 @@ class HomeScreenState extends State<HomeScreen> {
     },
   ];
 
-  final List<Map<String, dynamic>> _doctors = [
+  static const List<Map<String, dynamic>> _defaultDoctors = [
     {
       'id': 'psy_1',
       'name': 'dr. Nadia S., Sp.KJ',
@@ -387,11 +397,14 @@ class HomeScreenState extends State<HomeScreen> {
     },
   ];
 
+  List<Map<String, dynamic>> _doctors = List.from(_defaultDoctors);
+
   @override
   void initState() {
     super.initState();
     _loadUser();
     loadMoodData();
+    loadDoctors();
   }
 
   @override
@@ -400,11 +413,21 @@ class HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  void loadDoctors() async {
+    try {
+      final docs = await _api.getPsychologists();
+      if (mounted && docs.isNotEmpty) {
+        setState(() => _doctors = docs);
+      }
+    } catch (_) {}
+  }
+
   void loadMoodData() async {
     final list = await _storage.getMoods();
     if (mounted) {
       setState(() => _recentMoods = list);
     }
+    loadDoctors();
   }
 
   int _calculateStreak() {
@@ -525,18 +548,9 @@ class HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 20),
             Row(
               children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: doctor['avatarBg'] as Color? ?? const Color(0xFFCCFBF1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    doctor['icon'] as IconData? ?? Icons.person_rounded,
-                    color: doctor['avatarColor'] as Color? ?? const Color(0xFF0D9488),
-                    size: 28,
-                  ),
+                DoctorAvatar(
+                  doctor: doctor,
+                  size: 52,
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -584,7 +598,7 @@ class HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   Text(
-                    doctor['fee'] ?? 'Rp 150.000',
+                    (doctor['fee'] ?? doctor['price'] ?? 'Rp 150.000').toString(),
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
@@ -1397,20 +1411,9 @@ class HomeScreenState extends State<HomeScreen> {
                   child: Row(
                   children: [
                     // Avatar Bulat
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: doc['avatarBg'] as Color,
-                      ),
-                      child: Center(
-                        child: Icon(
-                          doc['icon'] as IconData,
-                          color: doc['avatarColor'] as Color,
-                          size: 26,
-                        ),
-                      ),
+                    DoctorAvatar(
+                      doctor: doc,
+                      size: 50,
                     ),
                     const SizedBox(width: 12),
 
@@ -1420,7 +1423,7 @@ class HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            doc['name'] as String,
+                            (doc['name'] ?? 'Dokter').toString(),
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 14,
                               fontWeight: FontWeight.w800,
@@ -1429,7 +1432,7 @@ class HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            doc['role'] as String,
+                            (doc['role'] ?? 'Psikolog Klinis').toString(),
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -1446,7 +1449,9 @@ class HomeScreenState extends State<HomeScreen> {
                               ),
                               const SizedBox(width: 3),
                               Text(
-                                '${doc["rating"]} (${doc["reviews"]})',
+                                (doc['rating'] != null && doc['rating'].toString() != '-' && doc['rating'].toString() != '0')
+                                    ? '${doc["rating"]} (${doc["reviews"] ?? 0})'
+                                    : 'Baru',
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
@@ -1464,7 +1469,7 @@ class HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          doc['fee'] as String,
+                          (doc['fee'] ?? doc['price'] ?? 'Rp 150.000').toString(),
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w800,

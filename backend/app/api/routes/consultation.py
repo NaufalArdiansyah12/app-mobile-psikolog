@@ -30,19 +30,20 @@ _inmemory_payments: Dict[str, Dict[str, Any]] = {} # order_id -> payment details
 _inmemory_doctor_chats: Dict[str, List[Dict[str, Any]]] = {} # conversation_key / booking_id -> messages
 
 
-def _resolve_conversation_key(sp, booking_id: str, doctor_id: Optional[str] = None, user_uuid: Optional[str] = None):
+def _resolve_conversation_key(sp, booking_id: str, doctor_id: Optional[str] = None, user_uuid: Optional[str] = None, user_id: Optional[str] = None):
     """Menemukan pair (user_id, psychologist_id) dan semua booking_id terkait untuk kontinuitas chat."""
-    uid = None
+    uid = user_id
     pid = doctor_id
     related_booking_ids = [booking_id]
 
     if sp:
         try:
-            b_res = sp.table("bookings").select("user_id, psychologist_id").eq("id", booking_id).limit(1).execute()
-            if b_res.data:
-                uid = str(b_res.data[0].get("user_id"))
-                pid = str(b_res.data[0].get("psychologist_id"))
-            elif user_uuid:
+            if not uid or not pid:
+                b_res = sp.table("bookings").select("user_id, psychologist_id").eq("id", booking_id).limit(1).execute()
+                if b_res.data:
+                    uid = uid or str(b_res.data[0].get("user_id"))
+                    pid = pid or str(b_res.data[0].get("psychologist_id"))
+            if not uid and user_uuid:
                 u_res = sp.table("users").select("id").eq("device_uuid", user_uuid).limit(1).execute()
                 if u_res.data:
                     uid = str(u_res.data[0].get("id"))
@@ -68,9 +69,9 @@ def _resolve_conversation_key(sp, booking_id: str, doctor_id: Optional[str] = No
     return conv_key, uid, pid, related_booking_ids
 
 
-def _get_chat_session(sp, booking_id: str, create: bool = False, doctor_id: Optional[str] = None, user_uuid: Optional[str] = None):
+def _get_chat_session(sp, booking_id: str, create: bool = False, doctor_id: Optional[str] = None, user_uuid: Optional[str] = None, user_id: Optional[str] = None):
     """Gunakan sesi chat yang konsisten per pasangan user & dokter agar percakapan terus bersambung."""
-    _, uid, pid, _ = _resolve_conversation_key(sp, booking_id, doctor_id, user_uuid)
+    _, uid, pid, _ = _resolve_conversation_key(sp, booking_id, doctor_id, user_uuid, user_id)
     title = f"consultation:{uid or 'user'}:{pid or 'doctor'}"
     try:
         found = sp.table("chat_sessions").select("id").eq("title", title).limit(1).execute()
@@ -98,13 +99,13 @@ def _get_chat_session(sp, booking_id: str, create: bool = False, doctor_id: Opti
         return None
 
 
-def _load_persisted_chat(booking_id: str, doctor_id: Optional[str] = None, user_uuid: Optional[str] = None) -> List[Dict[str, Any]]:
+def _load_persisted_chat(booking_id: str, doctor_id: Optional[str] = None, user_uuid: Optional[str] = None, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Memuat seluruh riwayat chat konsultasi antara user dan dokter yang sama."""
     sp = get_supabase()
     if not sp:
         return []
 
-    conv_key, uid, pid, related_bids = _resolve_conversation_key(sp, booking_id, doctor_id, user_uuid)
+    conv_key, uid, pid, related_bids = _resolve_conversation_key(sp, booking_id, doctor_id, user_uuid, user_id)
 
     try:
         res = (
@@ -121,7 +122,7 @@ def _load_persisted_chat(booking_id: str, doctor_id: Optional[str] = None, user_
 
     # Existing chat_messages table fallback
     try:
-        session_id = _get_chat_session(sp, booking_id, create=False, doctor_id=doctor_id, user_uuid=user_uuid)
+        session_id = _get_chat_session(sp, booking_id, create=False, doctor_id=doctor_id, user_uuid=user_uuid, user_id=user_id)
         if not session_id:
             return []
         res = (
@@ -223,6 +224,8 @@ def get_psychologists():
                                 doc["available_days"] = meta["days"]
                             if "slots" in meta:
                                 doc["available_slots"] = meta["slots"]
+                            if not doc.get("avatar") and "avatar" in meta:
+                                doc["avatar"] = meta["avatar"]
                         except Exception:
                             pass
                     cleaned.append(doc)
@@ -459,13 +462,14 @@ def check_booking_status(booking_id: str):
 def get_doctor_chat_messages(
     booking_id: str,
     doctor_id: Optional[str] = None,
-    user_uuid: Optional[str] = None
+    user_uuid: Optional[str] = None,
+    user_id: Optional[str] = None
 ):
     """Mengambil pesan obrolan 1-on-1 untuk booking yang sudah lunas (bersambung terus)."""
     sp = get_supabase()
-    conv_key, _, _, _ = _resolve_conversation_key(sp, booking_id, doctor_id, user_uuid)
+    conv_key, _, _, _ = _resolve_conversation_key(sp, booking_id, doctor_id, user_uuid, user_id)
 
-    persisted = _load_persisted_chat(booking_id, doctor_id, user_uuid)
+    persisted = _load_persisted_chat(booking_id, doctor_id, user_uuid, user_id)
     if persisted:
         _inmemory_doctor_chats[conv_key] = persisted
         _inmemory_doctor_chats[booking_id] = persisted
@@ -634,6 +638,8 @@ def get_user_active_sessions(user_uuid: str):
                                 doc["available_days"] = meta["days"]
                             if "slots" in meta:
                                 doc["available_slots"] = meta["slots"]
+                            if not doc.get("avatar") and "avatar" in meta:
+                                doc["avatar"] = meta["avatar"]
                         except Exception:
                             pass
 

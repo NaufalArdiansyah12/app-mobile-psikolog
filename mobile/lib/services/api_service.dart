@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
@@ -184,6 +185,9 @@ class ApiService {
               if (meta.containsKey('str_number')) doc['str'] = meta['str_number'];
               if (meta.containsKey('days')) doc['available_days'] = meta['days'];
               if (meta.containsKey('slots')) doc['available_slots'] = meta['slots'];
+              if ((doc['avatar'] == null || doc['avatar'].toString().isEmpty) && meta.containsKey('avatar')) {
+                doc['avatar'] = meta['avatar'];
+              }
             } catch (_) {}
           }
           result.add(doc);
@@ -240,7 +244,7 @@ class ApiService {
           'user_uuid': userUuid,
           'messages': messages.map((m) => m.toJson()).toList(),
         }),
-      );
+      ).timeout(const Duration(seconds: 15));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         return ChatAnalysisResult.fromJson(data);
@@ -669,6 +673,7 @@ class ApiService {
       List<String> availableDays = ['Senin', 'Selasa', 'Rabu', 'Kamis'];
       List<String> availableSlots = ['09:00 - 10:00', '13:00 - 14:00', '16:00 - 17:00', '19:00 - 20:00'];
 
+      String? avatar = doctorData['avatar']?.toString();
       final rawCat = doctorData['category']?.toString() ?? '';
       if (rawCat.trim().startsWith('{')) {
         try {
@@ -678,6 +683,9 @@ class ApiService {
           if (meta['str_number'] != null) strNumber = meta['str_number'];
           if (meta['days'] != null) availableDays = List<String>.from(meta['days']);
           if (meta['slots'] != null) availableSlots = List<String>.from(meta['slots']);
+          if ((avatar == null || avatar.isEmpty) && meta['avatar'] != null) {
+            avatar = meta['avatar'].toString();
+          }
         } catch (_) {}
       }
 
@@ -689,6 +697,7 @@ class ApiService {
         'rating': (doctorData['rating'] as num?)?.toDouble() ?? 5.0,
         'hospital': doctorData['hospital'] ?? 'RS Mitra Sehat Jakarta',
         'price': rawPrice,
+        'avatar': avatar,
         'total_consultations': totalConsultations,
         'today_sessions': todaySessions,
         'is_available': doctorData['is_available'] ?? true,
@@ -817,11 +826,30 @@ class ApiService {
     return false;
   }
 
-  // Fitur Dokter: Simpan jadwal, tarif, jam sesi, bio & kredensial ke DB Supabase
+  // Upload Foto Avatar Dokter ke Server Backend
+  Future<String?> uploadDoctorAvatar(File imageFile, {String? doctorId}) async {
+    try {
+      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/doctor/upload-avatar'));
+      if (doctorId != null && doctorId.isNotEmpty) {
+        request.fields['doctor_id'] = doctorId;
+      }
+      request.files.add(await http.MultipartFile.fromPath('file', imageFile.path));
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['avatar_url'] as String?;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Fitur Dokter: Simpan jadwal, tarif, jam sesi, bio, avatar & kredensial ke DB Supabase
   Future<bool> updateDoctorFullProfile({
     String? doctorId,
     String? name,
     String? specialization,
+    String? avatar,
     String? price,
     String? experience,
     String? hospital,
@@ -836,6 +864,7 @@ class ApiService {
       if (doctorId != null) 'doctor_id': doctorId,
       if (name != null) 'name': name,
       if (specialization != null) 'role': specialization,
+      if (avatar != null) 'avatar': avatar,
       if (price != null) 'price': price,
       if (experience != null) 'experience': experience,
       if (hospital != null) 'hospital': hospital,
@@ -868,11 +897,13 @@ class ApiService {
         'str_number': strNumber ?? 'STR: 31.1.2.100.3.19.112233',
         'days': availableDays ?? ['Senin', 'Selasa', 'Rabu', 'Kamis'],
         'slots': availableSlots ?? ['09:00 - 10:00', '13:00 - 14:00', '16:00 - 17:00', '19:00 - 20:00'],
+        if (avatar != null) 'avatar': avatar,
       };
 
       final supabasePatchData = <String, dynamic>{
         if (name != null) 'name': name,
         if (specialization != null) 'role': specialization,
+        if (avatar != null) 'avatar': avatar,
         if (price != null) 'price': price,
         if (experience != null) 'experience': experience,
         if (hospital != null) 'hospital': hospital,
@@ -1408,20 +1439,29 @@ class ApiService {
     String bookingId, {
     String? doctorId,
     String? userUuid,
+    String? userId,
   }) async {
     // 1. Ambil riwayat percakapan dokter yang sudah ada di lokal
     List<Map<String, dynamic>> combined = [];
-    if (doctorId != null && _localBookingChats.containsKey('doc_$doctorId')) {
+    final userKey = userId != null && userId.isNotEmpty ? 'u_$userId' : null;
+
+    if (userKey != null && doctorId != null && _localBookingChats.containsKey('${userKey}_doc_$doctorId')) {
+      combined = List<Map<String, dynamic>>.from(_localBookingChats['${userKey}_doc_$doctorId']!);
+    }
+    if (combined.isEmpty && userKey != null && doctorId != null) {
+      combined = await StorageService().getDoctorChat('', doctorId: doctorId, userId: userId);
+    }
+    if (combined.isEmpty && doctorId != null && _localBookingChats.containsKey('doc_$doctorId') && userId == null) {
       combined = List<Map<String, dynamic>>.from(_localBookingChats['doc_$doctorId']!);
     }
-    if (combined.isEmpty && doctorId != null) {
+    if (combined.isEmpty && doctorId != null && userId == null) {
       combined = await StorageService().getDoctorChat('', doctorId: doctorId);
     }
     if (combined.isEmpty && bookingId.isNotEmpty) {
       if (_localBookingChats.containsKey(bookingId)) {
         combined = List<Map<String, dynamic>>.from(_localBookingChats[bookingId]!);
       } else {
-        combined = await StorageService().getDoctorChat(bookingId, doctorId: doctorId);
+        combined = await StorageService().getDoctorChat(bookingId, doctorId: doctorId, userId: userId);
       }
     }
 
@@ -1430,6 +1470,7 @@ class ApiService {
       final queryParams = <String, String>{};
       if (doctorId != null && doctorId.isNotEmpty) queryParams['doctor_id'] = doctorId;
       if (userUuid != null && userUuid.isNotEmpty) queryParams['user_uuid'] = userUuid;
+      if (userId != null && userId.isNotEmpty) queryParams['user_id'] = userId;
 
       final uri = Uri.parse('$baseUrl/api/consultation/chat/$bookingId/messages')
           .replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
@@ -1464,29 +1505,38 @@ class ApiService {
     } catch (_) {}
 
     // 3. Fallback langsung ke Supabase Cloud DB chat_messages jika lokal masih kosong
-    if (combined.isEmpty &&
-        userUuid != null &&
-        userUuid.isNotEmpty &&
-        doctorId != null &&
-        doctorId.isNotEmpty) {
+    if (combined.isEmpty && doctorId != null && doctorId.isNotEmpty) {
       try {
         const supabaseUrl = 'https://ydlzrtpdsqaobxidrjvc.supabase.co';
         final headers = {
           'apikey': _supabaseKey,
           'Authorization': 'Bearer $_supabaseKey',
         };
-        String? userId;
-        final uRes = await http.get(
-          Uri.parse('$supabaseUrl/rest/v1/users?device_uuid=eq.$userUuid&select=id'),
-          headers: headers,
-        );
-        if (uRes.statusCode == 200) {
-          final uList = jsonDecode(uRes.body) as List;
-          if (uList.isNotEmpty) userId = uList[0]['id']?.toString();
+        String? targetUserId = userId;
+        if ((targetUserId == null || targetUserId.isEmpty) && userUuid != null && userUuid.isNotEmpty) {
+          final uRes = await http.get(
+            Uri.parse('$supabaseUrl/rest/v1/users?device_uuid=eq.$userUuid&select=id'),
+            headers: headers,
+          );
+          if (uRes.statusCode == 200) {
+            final uList = jsonDecode(uRes.body) as List;
+            if (uList.isNotEmpty) targetUserId = uList[0]['id']?.toString();
+          }
         }
-        if (userId != null && userId.isNotEmpty) {
+        if ((targetUserId == null || targetUserId.isEmpty) && bookingId.isNotEmpty) {
+          final bRes = await http.get(
+            Uri.parse('$supabaseUrl/rest/v1/bookings?id=eq.$bookingId&select=user_id'),
+            headers: headers,
+          );
+          if (bRes.statusCode == 200) {
+            final bList = jsonDecode(bRes.body) as List;
+            if (bList.isNotEmpty) targetUserId = bList[0]['user_id']?.toString();
+          }
+        }
+
+        if (targetUserId != null && targetUserId.isNotEmpty) {
           final sessRes = await http.get(
-            Uri.parse('$supabaseUrl/rest/v1/chat_sessions?title=eq.consultation:$userId:$doctorId&select=id'),
+            Uri.parse('$supabaseUrl/rest/v1/chat_sessions?title=eq.consultation:$targetUserId:$doctorId&select=id'),
             headers: headers,
           );
           if (sessRes.statusCode == 200) {
@@ -1503,7 +1553,7 @@ class ApiService {
                   combined.add({
                     'id': row['id'],
                     'booking_id': bookingId,
-                    'sender_id': row['role'] == 'assistant' ? 'doctor_id' : userUuid,
+                    'sender_id': row['role'] == 'assistant' ? doctorId : targetUserId,
                     'sender_name': row['role'] == 'assistant' ? 'dr. Spesialis' : 'Pasien',
                     'sender_role': row['role'] == 'assistant' ? 'doctor' : 'user',
                     'message': row['content'] ?? '',
@@ -1534,8 +1584,13 @@ class ApiService {
     }
 
     _localBookingChats[bookingId] = combined;
-    if (doctorId != null) _localBookingChats['doc_$doctorId'] = combined;
-    await StorageService().saveDoctorChat(bookingId, combined, doctorId: doctorId);
+    if (userKey != null && doctorId != null) {
+      _localBookingChats['${userKey}_doc_$doctorId'] = combined;
+    }
+    if (doctorId != null && userId == null) {
+      _localBookingChats['doc_$doctorId'] = combined;
+    }
+    await StorageService().saveDoctorChat(bookingId, combined, doctorId: doctorId, userId: userId);
     return combined;
   }
 
@@ -1547,9 +1602,10 @@ class ApiService {
     required String message,
     String senderRole = 'user',
     String? doctorId,
+    String? userId,
   }) async {
     // 1. Simpan langsung ke Supabase Cloud DB secara instan & redundan
-    if (doctorId != null && doctorId.isNotEmpty && senderId.isNotEmpty) {
+    if (doctorId != null && doctorId.isNotEmpty) {
       try {
         const supabaseUrl = 'https://ydlzrtpdsqaobxidrjvc.supabase.co';
         final headers = {
@@ -1558,19 +1614,36 @@ class ApiService {
           'Content-Type': 'application/json',
           'Prefer': 'return=representation',
         };
-        String userId = senderId;
-        if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(userId)) {
-          final uRes = await http.get(
-            Uri.parse('$supabaseUrl/rest/v1/users?device_uuid=eq.$senderId&select=id'),
-            headers: headers,
-          );
-          if (uRes.statusCode == 200) {
-            final uList = jsonDecode(uRes.body) as List;
-            if (uList.isNotEmpty) userId = uList[0]['id']?.toString() ?? userId;
+
+        String? targetUserId = userId;
+        if (targetUserId == null || targetUserId.isEmpty) {
+          if (senderRole != 'doctor') {
+            targetUserId = senderId;
+            if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(targetUserId)) {
+              final uRes = await http.get(
+                Uri.parse('$supabaseUrl/rest/v1/users?device_uuid=eq.$senderId&select=id'),
+                headers: headers,
+              );
+              if (uRes.statusCode == 200) {
+                final uList = jsonDecode(uRes.body) as List;
+                if (uList.isNotEmpty) targetUserId = uList[0]['id']?.toString() ?? targetUserId;
+              }
+            }
+          } else {
+            // Pengirim adalah dokter: cari user_id pasien dari tabel bookings
+            final bRes = await http.get(
+              Uri.parse('$supabaseUrl/rest/v1/bookings?id=eq.$bookingId&select=user_id'),
+              headers: headers,
+            );
+            if (bRes.statusCode == 200) {
+              final bList = jsonDecode(bRes.body) as List;
+              if (bList.isNotEmpty) targetUserId = bList[0]['user_id']?.toString();
+            }
           }
         }
-        if (RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(userId)) {
-          final title = 'consultation:$userId:$doctorId';
+
+        if (targetUserId != null && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(targetUserId)) {
+          final title = 'consultation:$targetUserId:$doctorId';
           String? sessId;
           final sRes = await http.get(
             Uri.parse('$supabaseUrl/rest/v1/chat_sessions?title=eq.$title&select=id'),
@@ -1584,7 +1657,7 @@ class ApiService {
             final newS = await http.post(
               Uri.parse('$supabaseUrl/rest/v1/chat_sessions'),
               headers: headers,
-              body: jsonEncode({'user_id': userId, 'title': title}),
+              body: jsonEncode({'user_id': targetUserId, 'title': title}),
             );
             if (newS.statusCode == 200 || newS.statusCode == 201) {
               final nList = jsonDecode(newS.body) as List;
@@ -1796,6 +1869,9 @@ class ApiService {
               if (meta.containsKey('str_number')) doc['str'] = meta['str_number'];
               if (meta.containsKey('days')) doc['available_days'] = meta['days'];
               if (meta.containsKey('slots')) doc['available_slots'] = meta['slots'];
+              if ((doc['avatar'] == null || doc['avatar'].toString().isEmpty) && meta.containsKey('avatar')) {
+                doc['avatar'] = meta['avatar'];
+              }
             } catch (_) {}
           }
           result.add({

@@ -1,9 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
 import '../../services/storage_service.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/notification_panel.dart';
+import '../../widgets/doctor_avatar.dart';
 import 'doctor_chat_screen.dart';
 
 class DoctorHomeScreen extends StatefulWidget {
@@ -30,6 +31,14 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
   List<Map<String, dynamic>> _todayBookings = [];
 
   static const Color primaryTeal = Color(0xFF006D77);
+  String _doctorAvatar = '';
+
+  Widget _buildDoctorAvatar() {
+    return DoctorAvatar(
+      avatarUrl: _doctorAvatar.isNotEmpty ? _doctorAvatar : null,
+      size: 44,
+    );
+  }
 
   @override
   void initState() {
@@ -40,8 +49,12 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final savedName = await _storage.getNickname();
+    final savedAvatar = await _storage.getDoctorAvatar();
     if (savedName.isNotEmpty && savedName != 'Sobat Hevenly' && savedName != 'Sobat Havenly' && savedName != 'Sobat MindPal') {
       _doctorName = savedName;
+    }
+    if (savedAvatar != null && savedAvatar.isNotEmpty) {
+      _doctorAvatar = savedAvatar;
     }
 
     final dashboardData = await _api.getDoctorDashboard();
@@ -57,8 +70,32 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
           _todaySessions = dashboardData['today_sessions'] ?? _todaySessions;
           _isAvailable = dashboardData['is_available'] ?? true;
           _earnings = dashboardData['earnings_this_month'] ?? _earnings;
+          if (dashboardData['avatar'] != null && dashboardData['avatar'].toString().isNotEmpty) {
+            _doctorAvatar = dashboardData['avatar'].toString();
+          }
         }
-        _todayBookings = bookingsData.take(3).toList();
+        // Deduplikasi antrean konsultasi per user (1 User = 1 Ruang Chat Konsultasi)
+        final userBookingsMap = <String, Map<String, dynamic>>{};
+        for (final b in bookingsData) {
+          final status = (b['status'] ?? '').toString().toLowerCase();
+          if (status != 'confirmed' && status != 'pending' && status != 'completed') continue;
+
+          final userId = (b['user_id'] ?? '').toString().trim();
+          final patientName = (b['patient_name'] ?? 'Pasien').toString().trim();
+          final userKey = userId.isNotEmpty ? 'u_$userId' : 'name_${patientName.toLowerCase()}';
+
+          if (!userBookingsMap.containsKey(userKey)) {
+            userBookingsMap[userKey] = Map<String, dynamic>.from(b);
+          } else {
+            final existing = userBookingsMap[userKey]!;
+            final existStatus = (existing['status'] ?? '').toString().toLowerCase();
+            // Prioritaskan sesi yang berstatus confirmed
+            if (status == 'confirmed' && existStatus != 'confirmed') {
+              userBookingsMap[userKey] = Map<String, dynamic>.from(b);
+            }
+          }
+        }
+        _todayBookings = userBookingsMap.values.take(3).toList();
         _isLoading = false;
       });
     }
@@ -118,13 +155,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
                                 ),
                               ],
                             ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.medical_services_rounded,
-                                color: primaryTeal,
-                                size: 22,
-                              ),
-                            ),
+                            child: _buildDoctorAvatar(),
                           ),
                           const SizedBox(width: 12),
                           Column(
@@ -142,11 +173,11 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
                               Row(
                                 children: [
                                   ConstrainedBox(
-                                    constraints: const BoxConstraints(maxWidth: 160),
+                                    constraints: const BoxConstraints(maxWidth: 220),
                                     child: Text(
                                       _doctorName,
                                       style: GoogleFonts.plusJakartaSans(
-                                        fontSize: 15,
+                                        fontSize: 16,
                                         fontWeight: FontWeight.w800,
                                         color: Colors.white,
                                       ),
@@ -155,105 +186,10 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
                                     ),
                                   ),
                                   const SizedBox(width: 4),
-                                  const Icon(Icons.verified, color: Colors.white, size: 15),
+                                  const Icon(Icons.verified, color: Colors.white, size: 16),
                                 ],
                               ),
                             ],
-                          ),
-                        ],
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Status Online/Offline Pill
-                          GestureDetector(
-                            onTap: () => _toggleAvailability(!_isAvailable),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: _isAvailable ? const Color(0xFFECFDF5) : Colors.white.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: _isAvailable ? const Color(0xFF10B981) : Colors.white.withValues(alpha: 0.4),
-                                  width: 1.2,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.08),
-                                    blurRadius: 6,
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: _isAvailable ? const Color(0xFF10B981) : Colors.white70,
-                                      boxShadow: _isAvailable
-                                          ? [
-                                              BoxShadow(
-                                                color: const Color(0xFF10B981).withValues(alpha: 0.6),
-                                                blurRadius: 4,
-                                              ),
-                                            ]
-                                          : null,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _isAvailable ? 'Online' : 'Offline',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      color: _isAvailable ? const Color(0xFF047857) : Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-
-                          // Notification Bell
-                          InkWell(
-                            onTap: () => NotificationPanel.show(context),
-                            borderRadius: BorderRadius.circular(20),
-                            child: Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.2),
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 1.2),
-                              ),
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  const Icon(
-                                    Icons.notifications_none_rounded,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                  Positioned(
-                                    top: 7,
-                                    right: 7,
-                                    child: Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFEF4444),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 1.5),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                           ),
                         ],
                       ),
@@ -1037,8 +973,10 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
                         MaterialPageRoute(
                           builder: (_) => DoctorChatScreen(
                             bookingId: b['id']?.toString() ?? 'bk_doc_1',
+                            userId: b['user_id']?.toString(),
                             patientName: patientName,
                             bookingNotes: notes,
+                            scheduleTime: b['schedule_time']?.toString(),
                           ),
                         ),
                       );

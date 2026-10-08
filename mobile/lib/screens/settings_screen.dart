@@ -49,11 +49,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _loadProfile() async {
-    final name = await _storage.getNickname();
     final uuid = await _storage.getOrCreateUserUuid();
+    final name = await _storage.getNickname();
     final email = await _storage.getUserEmail();
     final bio = await _storage.getUserBio();
-    final avatar = await _storage.getUserAvatar();
+    final avatar = await _storage.getUserAvatar(userUuid: uuid);
     if (!mounted) return;
     setState(() {
       _nickname = name.isNotEmpty ? name : 'Nina Sarah';
@@ -391,7 +391,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         if (newEmail.isNotEmpty) {
                           await _storage.setUserEmail(newEmail);
                         }
-                        await _storage.setUserAvatar(selectedAvatar);
+                        await _storage.setUserAvatar(selectedAvatar, userUuid: _userUuid);
 
                         setState(() {
                           if (newName.isNotEmpty) _nickname = newName;

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/storage_service.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/doctor_avatar.dart';
 import '../auth_screen.dart';
 import 'doctor_edit_schedule_screen.dart';
 
@@ -46,7 +48,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   Future<void> _loadProfile() async {
     final name = await _storage.getNickname();
     final email = await _storage.getUserEmail();
-    final avatar = await _storage.getUserAvatar();
+    var avatar = await _storage.getDoctorAvatar();
 
     final savedDays = await _storage.getDoctorScheduleDays();
     final savedSlots = await _storage.getDoctorScheduleSlots();
@@ -69,6 +71,9 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
     var str = savedStr;
 
     if (dashboard != null) {
+      if (dashboard['avatar'] != null && dashboard['avatar'].toString().isNotEmpty) {
+        avatar = dashboard['avatar'].toString();
+      }
       if (dashboard['available_days'] != null && (dashboard['available_days'] as List).isNotEmpty) {
         days = List<String>.from(dashboard['available_days']);
       }
@@ -135,6 +140,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
     final nameCtrl = TextEditingController(text: _doctorName);
     final specCtrl = TextEditingController(text: _specialization);
     String selectedAvatar = _avatarType;
+    bool isSaving = false;
 
     showModalBottomSheet(
       context: context,
@@ -161,20 +167,10 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
           }
 
           Widget buildModalAvatarPreview() {
-            if (selectedAvatar.startsWith('file:')) {
-              final path = selectedAvatar.replaceFirst('file:', '');
-              return ClipOval(
-                child: Image.file(File(path), fit: BoxFit.cover),
-              );
-            } else if (selectedAvatar.startsWith('asset:')) {
-              final path = selectedAvatar.replaceFirst('asset:', '');
-              return ClipOval(
-                child: Image.asset(path, fit: BoxFit.cover),
-              );
-            } else {
-              final emoji = selectedAvatar.replaceFirst('emoji:', '');
-              return Center(child: Text(emoji, style: const TextStyle(fontSize: 34)));
-            }
+            return DoctorAvatar(
+              avatarUrl: selectedAvatar,
+              size: 80,
+            );
           }
 
           return Container(
@@ -323,24 +319,63 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                         elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                       ),
-                      onPressed: () async {
+                      onPressed: isSaving ? null : () async {
+                        setModalState(() => isSaving = true);
                         final newName = nameCtrl.text.trim();
                         final newSpec = specCtrl.text.trim();
+                        String avatarToPersist = selectedAvatar;
+
+                        if (selectedAvatar.startsWith('file:')) {
+                          final filePath = selectedAvatar.replaceFirst('file:', '');
+                          final file = File(filePath);
+                          if (file.existsSync()) {
+                            // Coba upload file ke server backend
+                            final uploadedUrl = await _api.uploadDoctorAvatar(file);
+                            if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+                              avatarToPersist = uploadedUrl;
+                            } else {
+                              // Fallback kompresi & konversi ke base64 data URI
+                              try {
+                                final bytes = await file.readAsBytes();
+                                avatarToPersist = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+                              } catch (_) {}
+                            }
+                          }
+                        }
+
                         if (newName.isNotEmpty) {
                           await _storage.setNickname(newName);
                         }
-                        if (selectedAvatar.isNotEmpty) {
-                          await _storage.setUserAvatar(selectedAvatar);
+                        if (avatarToPersist.isNotEmpty) {
+                          await _storage.setDoctorAvatar(avatarToPersist);
                         }
-                        setState(() {
-                          if (newName.isNotEmpty) _doctorName = newName;
-                          if (newSpec.isNotEmpty) _specialization = newSpec;
-                          _avatarType = selectedAvatar;
-                        });
+
+                        // Kirim ke database backend & Supabase
+                        final savedDb = await _api.updateDoctorFullProfile(
+                          name: newName.isNotEmpty ? newName : null,
+                          specialization: newSpec.isNotEmpty ? newSpec : null,
+                          avatar: avatarToPersist.isNotEmpty ? avatarToPersist : null,
+                        );
+
+                        if (mounted) {
+                          setState(() {
+                            if (newName.isNotEmpty) _doctorName = newName;
+                            if (newSpec.isNotEmpty) _specialization = newSpec;
+                            _avatarType = avatarToPersist;
+                          });
+                        }
                         if (modalCtx.mounted) Navigator.pop(modalCtx);
-                        _showSnackBar('Profil dokter berhasil diperbarui');
+                        _showSnackBar(savedDb 
+                            ? 'Profil dan foto dokter berhasil tersimpan di Database!' 
+                            : 'Profil dokter berhasil diperbarui.');
                       },
-                      child: Text('Simpan Perubahan', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700)),
+                      child: isSaving
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : Text('Simpan Perubahan', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700)),
                     ),
                   ),
                 ],
@@ -568,34 +603,10 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
 
   // WIDGET HELPERS
   Widget _buildAvatarWidget() {
-    if (_avatarType.startsWith('file:')) {
-      final path = _avatarType.replaceFirst('file:', '');
-      return ClipOval(
-        child: Image.file(
-          File(path),
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => const Center(
-            child: Icon(Icons.medical_services_rounded, color: primaryTeal, size: 38),
-          ),
-        ),
-      );
-    } else if (_avatarType.startsWith('asset:')) {
-      final path = _avatarType.replaceFirst('asset:', '');
-      return ClipOval(
-        child: Image.asset(
-          path,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => const Center(
-            child: Icon(Icons.medical_services_rounded, color: primaryTeal, size: 38),
-          ),
-        ),
-      );
-    } else {
-      final emoji = _avatarType.replaceFirst('emoji:', '');
-      return Center(
-        child: Text(emoji, style: const TextStyle(fontSize: 42)),
-      );
-    }
+    return DoctorAvatar(
+      avatarUrl: _avatarType,
+      size: 84,
+    );
   }
 
   Widget _buildInputLabel(String label) {
