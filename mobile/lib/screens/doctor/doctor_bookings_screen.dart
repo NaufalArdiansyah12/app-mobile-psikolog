@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/ai_screening_modal.dart';
+import '../../widgets/doctor_avatar.dart';
 import 'doctor_chat_screen.dart';
 import 'doctor_edit_schedule_screen.dart';
 
@@ -491,27 +493,10 @@ class _DoctorBookingsScreenState extends State<DoctorBookingsScreen> {
               Expanded(
                 child: Row(
                   children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [Color(0xFF0D9488), Color(0xFF0F766E)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          patientName.isNotEmpty ? patientName[0].toUpperCase() : 'P',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ),
+                    DoctorAvatar(
+                      avatarUrl: item['patient_avatar']?.toString(),
+                      size: 44,
+                      isCircle: true,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -647,6 +632,84 @@ class _DoctorBookingsScreenState extends State<DoctorBookingsScreen> {
               ],
             ),
           ),
+
+          // Pre-Screening AI Triase Pasien Jika Ada
+          if (item['ai_screening'] != null) ...[
+            Builder(builder: (context) {
+              final ai = item['ai_screening'] as Map<String, dynamic>;
+              final score = int.tryParse(ai['distress_score']?.toString() ?? '4') ?? 4;
+              final level = ai['distress_level']?.toString() ?? (score <= 3 ? 'Ringan' : score <= 6 ? 'Sedang' : 'Berat');
+              final badgeColor = score <= 3
+                  ? const Color(0xFF047857)
+                  : score <= 6
+                      ? const Color(0xFFB45309)
+                      : const Color(0xFFB91C1C);
+              final badgeBackground = score <= 3
+                  ? const Color(0xFFECFDF5)
+                  : score <= 6
+                      ? const Color(0xFFFFFBEB)
+                      : const Color(0xFFFEF2F2);
+              final badgeBorder = score <= 3
+                  ? const Color(0xFFA7F3D0)
+                  : score <= 6
+                      ? const Color(0xFFFDE68A)
+                      : const Color(0xFFFECACA);
+
+              return Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: badgeBackground,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: badgeBorder),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.psychology_rounded, size: 16, color: badgeColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "AI Triase: Distress $score/10 ($level)",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: badgeColor,
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () {
+                        AiScreeningModal.show(
+                          context,
+                          patientName: patientName,
+                          screeningData: ai,
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              "Lihat Hasil",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: badgeColor,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            Icon(Icons.arrow_forward_ios_rounded, size: 9, color: badgeColor),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
           const SizedBox(height: 14),
 
           // Tombol Aksi Dokter
@@ -712,6 +775,7 @@ class _DoctorBookingsScreenState extends State<DoctorBookingsScreen> {
                             patientAge: item['patient_age'],
                             bookingNotes: notes,
                             scheduleTime: scheduleTime,
+                            aiScreening: item['ai_screening'] as Map<String, dynamic>?,
                           ),
                         ),
                       ).then((completed) {
@@ -766,6 +830,7 @@ class _DoctorBookingsScreenState extends State<DoctorBookingsScreen> {
                             patientAge: item['patient_age'],
                             bookingNotes: notes,
                             scheduleTime: scheduleTime,
+                            aiScreening: item['ai_screening'] as Map<String, dynamic>?,
                           ),
                         ),
                       );

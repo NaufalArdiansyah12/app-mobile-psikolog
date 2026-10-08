@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/storage_service.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
+import '../widgets/doctor_avatar.dart';
 import 'auth_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -62,6 +63,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _bio = bio.isNotEmpty ? bio : 'Graphics and Web Designer';
       _avatarType = avatar ?? 'asset:assets/gambar_home.jpeg';
     });
+
+    // Ambil data profil terupdate langsung dari Supabase / Backend API
+    try {
+      final remoteProfile = await _apiService.getUserProfile(uuid);
+      if (remoteProfile != null && mounted) {
+        final rName = remoteProfile['nickname']?.toString();
+        final rAvatar = remoteProfile['avatar']?.toString();
+        final rBio = remoteProfile['bio']?.toString();
+        final rEmail = remoteProfile['email']?.toString();
+
+        setState(() {
+          if (rName != null && rName.isNotEmpty) _nickname = rName;
+          if (rAvatar != null && rAvatar.isNotEmpty) _avatarType = rAvatar;
+          if (rBio != null && rBio.isNotEmpty) _bio = rBio;
+          if (rEmail != null && rEmail.isNotEmpty) _email = rEmail;
+        });
+
+        if (rName != null && rName.isNotEmpty) await _storage.setNickname(rName);
+        if (rAvatar != null && rAvatar.isNotEmpty) await _storage.setUserAvatar(rAvatar, userUuid: uuid);
+        if (rBio != null && rBio.isNotEmpty) await _storage.setUserBio(rBio);
+        if (rEmail != null && rEmail.isNotEmpty) await _storage.setUserEmail(rEmail);
+      }
+    } catch (_) {}
   }
 
   Future<void> _safeLaunchUrl(String urlString) async {
@@ -110,28 +134,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           }
 
           Widget buildModalAvatarPreview() {
-            if (selectedAvatar.startsWith('file:')) {
-              final path = selectedAvatar.replaceFirst('file:', '');
-              return ClipOval(
-                child: Image.file(
-                  File(path),
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Center(child: Text("🌸", style: TextStyle(fontSize: 32))),
-                ),
-              );
-            } else if (selectedAvatar.startsWith('asset:')) {
-              final path = selectedAvatar.replaceFirst('asset:', '');
-              return ClipOval(
-                child: Image.asset(
-                  path,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Center(child: Text("🌸", style: TextStyle(fontSize: 32))),
-                ),
-              );
-            } else {
-              final emoji = selectedAvatar.replaceFirst('emoji:', '');
-              return Center(child: Text(emoji, style: const TextStyle(fontSize: 36)));
-            }
+            return DoctorAvatar(
+              avatarUrl: selectedAvatar,
+              size: 84,
+              isCircle: true,
+            );
           }
 
           return Container(
@@ -382,6 +389,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         final newBio = bioCtrl.text.trim();
                         final newEmail = emailCtrl.text.trim();
 
+                        // 1. Jika avatar berupa file lokal foto (file:...), upload ke server dulu
+                        String avatarToPersist = selectedAvatar;
+                        if (selectedAvatar.startsWith('file:')) {
+                          final filePath = selectedAvatar.replaceFirst('file:', '');
+                          final file = File(filePath);
+                          if (await file.exists()) {
+                            final uploadedUrl = await _apiService.uploadUserAvatar(file, userUuid: _userUuid);
+                            if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+                              avatarToPersist = uploadedUrl;
+                            }
+                          }
+                        }
+
+                        // 2. Simpan ke database server & Supabase via API
+                        await _apiService.updateUserProfile(
+                          userUuid: _userUuid,
+                          nickname: newName.isNotEmpty ? newName : null,
+                          avatar: avatarToPersist,
+                          bio: newBio.isNotEmpty ? newBio : null,
+                          email: newEmail.isNotEmpty ? newEmail : null,
+                        );
+
+                        // 3. Simpan ke local storage
                         if (newName.isNotEmpty) {
                           await _storage.setNickname(newName);
                         }
@@ -391,19 +421,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         if (newEmail.isNotEmpty) {
                           await _storage.setUserEmail(newEmail);
                         }
-                        await _storage.setUserAvatar(selectedAvatar, userUuid: _userUuid);
+                        await _storage.setUserAvatar(avatarToPersist, userUuid: _userUuid);
 
                         setState(() {
                           if (newName.isNotEmpty) _nickname = newName;
                           if (newBio.isNotEmpty) _bio = newBio;
                           if (newEmail.isNotEmpty) _email = newEmail;
-                          _avatarType = selectedAvatar;
+                          _avatarType = avatarToPersist;
                         });
 
                         if (modalCtx.mounted) Navigator.pop(modalCtx);
 
                         if (mounted) {
-                          _showSnackBar("Profil berhasil diperbarui!");
+                          _showSnackBar("Profil berhasil disimpan ke database!");
                         }
                       },
                       child: Text(
@@ -1868,34 +1898,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildAvatarWidget() {
-    if (_avatarType.startsWith('file:')) {
-      final path = _avatarType.replaceFirst('file:', '');
-      return ClipOval(
-        child: Image.file(
-          File(path),
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => const Center(
-            child: Text("🌸", style: TextStyle(fontSize: 38)),
-          ),
-        ),
-      );
-    } else if (_avatarType.startsWith('asset:')) {
-      final path = _avatarType.replaceFirst('asset:', '');
-      return ClipOval(
-        child: Image.asset(
-          path,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => const Center(
-            child: Text("🌸", style: TextStyle(fontSize: 38)),
-          ),
-        ),
-      );
-    } else {
-      final emoji = _avatarType.replaceFirst('emoji:', '');
-      return Center(
-        child: Text(emoji, style: const TextStyle(fontSize: 42)),
-      );
-    }
+    return DoctorAvatar(
+      avatarUrl: _avatarType,
+      size: 96,
+      isCircle: true,
+      border: Border.all(color: Colors.white, width: 3.5),
+    );
   }
 
   void _showSnackBar(String msg) {

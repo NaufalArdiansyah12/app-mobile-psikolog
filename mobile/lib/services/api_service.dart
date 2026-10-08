@@ -204,8 +204,11 @@ class ApiService {
     required String userUuid,
     required String psychologistId,
     required String scheduleTime,
+    String? notes,
+    Map<String, dynamic>? aiScreening,
   }) async {
     try {
+      final latestAi = aiScreening ?? (await StorageService().getLatestAiAnalysis())?.toJson();
       final res = await http.post(
         Uri.parse('$baseUrl/api/consultation/bookings'),
         headers: {'Content-Type': 'application/json'},
@@ -213,6 +216,8 @@ class ApiService {
           'user_uuid': userUuid,
           'psychologist_id': psychologistId,
           'schedule_time': scheduleTime,
+          'notes': notes,
+          'ai_screening': latestAi,
         }),
       );
       return res.statusCode == 200;
@@ -733,7 +738,7 @@ class ApiService {
       const supabaseUrl = 'https://ydlzrtpdsqaobxidrjvc.supabase.co';
       final supabaseServiceKey = _supabaseKey;
       final res = await http.get(
-        Uri.parse('$supabaseUrl/rest/v1/bookings?select=id,user_id,psychologist_id,schedule_time,status,created_at,users(nickname),psychologists(name,role,price)&order=created_at.desc'),
+        Uri.parse('$supabaseUrl/rest/v1/bookings?select=id,user_id,psychologist_id,schedule_time,status,notes,ai_screening,created_at,users(nickname),psychologists(name,role,price)&order=created_at.desc'),
         headers: {
           'apikey': supabaseServiceKey,
           'Authorization': 'Bearer $supabaseServiceKey',
@@ -750,8 +755,9 @@ class ApiService {
             'patient_name': user['nickname'] ?? 'Pasien Hevenly',
             'patient_age': 'Umum',
             'schedule_time': item['schedule_time'] ?? 'Jadwal Konsultasi',
-            'notes': 'Sesi konsultasi privat kesehatan mental bersama tenaga ahli.',
+            'notes': item['notes'] ?? 'Sesi konsultasi privat kesehatan mental bersama tenaga ahli.',
             'status': (item['status'] ?? 'confirmed').toString().toLowerCase(),
+            'ai_screening': item['ai_screening'],
             'created_at': item['created_at'],
           });
         }
@@ -839,6 +845,65 @@ class ApiService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['avatar_url'] as String?;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Upload Foto Avatar Pasien / Pengguna ke Server Backend
+  Future<String?> uploadUserAvatar(File imageFile, {String? userUuid}) async {
+    try {
+      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/user/upload-avatar'));
+      if (userUuid != null && userUuid.isNotEmpty) {
+        request.fields['user_uuid'] = userUuid;
+      }
+      request.files.add(await http.MultipartFile.fromPath('file', imageFile.path));
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['avatar_url'] ?? data['url']) as String?;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Update Profil Pengguna / Pasien ke Backend & Supabase Database
+  Future<Map<String, dynamic>?> updateUserProfile({
+    required String userUuid,
+    String? nickname,
+    String? avatar,
+    String? bio,
+    String? email,
+    String? phone,
+  }) async {
+    try {
+      final payload = {
+        'user_uuid': userUuid,
+        if (nickname != null) 'nickname': nickname,
+        if (avatar != null) 'avatar': avatar,
+        if (bio != null) 'bio': bio,
+        if (email != null) 'email': email,
+        if (phone != null) 'phone': phone,
+      };
+      final res = await http.put(
+        Uri.parse('$baseUrl/api/user/profile'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Ambil Profil Pengguna / Pasien dari Database Backend
+  Future<Map<String, dynamic>?> getUserProfile(String userUuid) async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/api/user/$userUuid/profile'));
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
       }
     } catch (_) {}
     return null;
@@ -971,8 +1036,13 @@ class ApiService {
     required String paymentType,
     String? bank,
     required int grossAmount,
+    String? notes,
+    Map<String, dynamic>? aiScreening,
   }) async {
-    // 1. Map psychologist ID ke UUID resmi Supabase
+    // 1. Ambil screening analisis AI terakhir
+    final latestAi = aiScreening ?? (await StorageService().getLatestAiAnalysis())?.toJson();
+
+    // Map psychologist ID ke UUID resmi Supabase
     String targetPsyId = psychologistId;
     if (psychologistId == 'psy_1') targetPsyId = '3354dda3-863d-48a2-ab48-19d1cded24dc';
     if (psychologistId == 'psy_2') targetPsyId = '210ee97a-767c-4278-88cf-c152624893d5';
@@ -998,6 +1068,8 @@ class ApiService {
           'payment_type': paymentType,
           'bank': bank,
           'gross_amount': grossAmount,
+          'notes': notes,
+          'ai_screening': latestAi,
         }),
       );
       if (res.statusCode == 200) {
@@ -1144,6 +1216,16 @@ class ApiService {
       }
 
       if (userId.isNotEmpty) {
+        final Map<String, dynamic> insertBody = {
+          'id': bookingId,
+          'user_id': userId,
+          'psychologist_id': targetPsyId,
+          'schedule_time': scheduleTime,
+          'status': 'pending',
+        };
+        if (notes != null) insertBody['notes'] = notes;
+        if (latestAi != null) insertBody['ai_screening'] = latestAi;
+
         final spBookingRes = await http.post(
           Uri.parse('$supabaseUrl/rest/v1/bookings'),
           headers: {
@@ -1152,13 +1234,7 @@ class ApiService {
             'Content-Type': 'application/json',
             'Prefer': 'return=representation',
           },
-          body: jsonEncode({
-            'id': bookingId,
-            'user_id': userId,
-            'psychologist_id': targetPsyId,
-            'schedule_time': scheduleTime,
-            'status': 'pending',
-          }),
+          body: jsonEncode(insertBody),
         );
         if (spBookingRes.statusCode == 200 || spBookingRes.statusCode == 201) {
           final bList = jsonDecode(spBookingRes.body) as List;
@@ -1594,6 +1670,88 @@ class ApiService {
     return combined;
   }
 
+  // Sinkronisasi pesan konsultasi ke Supabase Cloud (Background / Fallback)
+  Future<void> _syncConsultationMessageToSupabase({
+    required String bookingId,
+    required String senderId,
+    required String message,
+    required String senderRole,
+    String? doctorId,
+    String? userId,
+  }) async {
+    if (doctorId == null || doctorId.isEmpty) return;
+    try {
+      const supabaseUrl = 'https://ydlzrtpdsqaobxidrjvc.supabase.co';
+      final headers = {
+        'apikey': _supabaseKey,
+        'Authorization': 'Bearer $_supabaseKey',
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation',
+      };
+
+      String? targetUserId = userId;
+      if (targetUserId == null || targetUserId.isEmpty) {
+        if (senderRole != 'doctor') {
+          targetUserId = senderId;
+          if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(targetUserId)) {
+            final uRes = await http.get(
+              Uri.parse('$supabaseUrl/rest/v1/users?device_uuid=eq.$senderId&select=id'),
+              headers: headers,
+            );
+            if (uRes.statusCode == 200) {
+              final uList = jsonDecode(uRes.body) as List;
+              if (uList.isNotEmpty) targetUserId = uList[0]['id']?.toString() ?? targetUserId;
+            }
+          }
+        } else {
+          final bRes = await http.get(
+            Uri.parse('$supabaseUrl/rest/v1/bookings?id=eq.$bookingId&select=user_id'),
+            headers: headers,
+          );
+          if (bRes.statusCode == 200) {
+            final bList = jsonDecode(bRes.body) as List;
+            if (bList.isNotEmpty) targetUserId = bList[0]['user_id']?.toString();
+          }
+        }
+      }
+
+      if (targetUserId != null && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(targetUserId)) {
+        final title = 'consultation:$targetUserId:$doctorId';
+        String? sessId;
+        final sRes = await http.get(
+          Uri.parse('$supabaseUrl/rest/v1/chat_sessions?title=eq.$title&select=id'),
+          headers: headers,
+        );
+        if (sRes.statusCode == 200) {
+          final sList = jsonDecode(sRes.body) as List;
+          if (sList.isNotEmpty) sessId = sList[0]['id']?.toString();
+        }
+        if (sessId == null) {
+          final newS = await http.post(
+            Uri.parse('$supabaseUrl/rest/v1/chat_sessions'),
+            headers: headers,
+            body: jsonEncode({'user_id': targetUserId, 'title': title}),
+          );
+          if (newS.statusCode == 200 || newS.statusCode == 201) {
+            final nList = jsonDecode(newS.body) as List;
+            if (nList.isNotEmpty) sessId = nList[0]['id']?.toString();
+          }
+        }
+        if (sessId != null) {
+          await http.post(
+            Uri.parse('$supabaseUrl/rest/v1/chat_messages'),
+            headers: headers,
+            body: jsonEncode({
+              'session_id': sessId,
+              'role': senderRole == 'doctor' ? 'assistant' : 'user',
+              'content': message,
+            }),
+          );
+        }
+      }
+    } catch (_) {}
+  }
+
   // Kirim Pesan dalam Sesi Konsultasi (Pasien atau Dokter)
   Future<Map<String, dynamic>?> sendDoctorMessage({
     required String bookingId,
@@ -1604,81 +1762,7 @@ class ApiService {
     String? doctorId,
     String? userId,
   }) async {
-    // 1. Simpan langsung ke Supabase Cloud DB secara instan & redundan
-    if (doctorId != null && doctorId.isNotEmpty) {
-      try {
-        const supabaseUrl = 'https://ydlzrtpdsqaobxidrjvc.supabase.co';
-        final headers = {
-          'apikey': _supabaseKey,
-          'Authorization': 'Bearer $_supabaseKey',
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation',
-        };
-
-        String? targetUserId = userId;
-        if (targetUserId == null || targetUserId.isEmpty) {
-          if (senderRole != 'doctor') {
-            targetUserId = senderId;
-            if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(targetUserId)) {
-              final uRes = await http.get(
-                Uri.parse('$supabaseUrl/rest/v1/users?device_uuid=eq.$senderId&select=id'),
-                headers: headers,
-              );
-              if (uRes.statusCode == 200) {
-                final uList = jsonDecode(uRes.body) as List;
-                if (uList.isNotEmpty) targetUserId = uList[0]['id']?.toString() ?? targetUserId;
-              }
-            }
-          } else {
-            // Pengirim adalah dokter: cari user_id pasien dari tabel bookings
-            final bRes = await http.get(
-              Uri.parse('$supabaseUrl/rest/v1/bookings?id=eq.$bookingId&select=user_id'),
-              headers: headers,
-            );
-            if (bRes.statusCode == 200) {
-              final bList = jsonDecode(bRes.body) as List;
-              if (bList.isNotEmpty) targetUserId = bList[0]['user_id']?.toString();
-            }
-          }
-        }
-
-        if (targetUserId != null && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(targetUserId)) {
-          final title = 'consultation:$targetUserId:$doctorId';
-          String? sessId;
-          final sRes = await http.get(
-            Uri.parse('$supabaseUrl/rest/v1/chat_sessions?title=eq.$title&select=id'),
-            headers: headers,
-          );
-          if (sRes.statusCode == 200) {
-            final sList = jsonDecode(sRes.body) as List;
-            if (sList.isNotEmpty) sessId = sList[0]['id']?.toString();
-          }
-          if (sessId == null) {
-            final newS = await http.post(
-              Uri.parse('$supabaseUrl/rest/v1/chat_sessions'),
-              headers: headers,
-              body: jsonEncode({'user_id': targetUserId, 'title': title}),
-            );
-            if (newS.statusCode == 200 || newS.statusCode == 201) {
-              final nList = jsonDecode(newS.body) as List;
-              if (nList.isNotEmpty) sessId = nList[0]['id']?.toString();
-            }
-          }
-          if (sessId != null) {
-            await http.post(
-              Uri.parse('$supabaseUrl/rest/v1/chat_messages'),
-              headers: headers,
-              body: jsonEncode({
-                'session_id': sessId,
-                'role': senderRole == 'doctor' ? 'assistant' : 'user',
-                'content': message,
-              }),
-            );
-          }
-        }
-      } catch (_) {}
-    }
-
+    // 1. Kirim langsung ke FastAPI backend (Instan <100ms)
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/api/consultation/chat/$bookingId/send'),
@@ -1709,9 +1793,30 @@ class ApiService {
           }
           await StorageService().saveDoctorChat(bookingId, _localBookingChats[bookingId]!, doctorId: doctorId);
         }
+
+        // Sinkronisasi redundan ke Supabase Cloud di background secara non-blocking
+        unawaited(_syncConsultationMessageToSupabase(
+          bookingId: bookingId,
+          senderId: senderId,
+          message: message,
+          senderRole: senderRole,
+          doctorId: doctorId,
+          userId: userId,
+        ));
+
         return data;
       }
     } catch (_) {}
+
+    // 2. Fallback jika backend lokal offline: kirim langsung ke Supabase
+    await _syncConsultationMessageToSupabase(
+      bookingId: bookingId,
+      senderId: senderId,
+      message: message,
+      senderRole: senderRole,
+      doctorId: doctorId,
+      userId: userId,
+    );
 
     final fallbackMsg = <String, dynamic>{
       'id': 'msg_${DateTime.now().millisecondsSinceEpoch}',

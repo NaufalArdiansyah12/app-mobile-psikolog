@@ -82,9 +82,8 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
     _scheduleTime = widget.scheduleTime;
     _loadDoctorDetails();
     _initChat();
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       _pollNewMessages();
-      if (mounted) setState(() {});
     });
     _checkAndShowRatingModal();
   }
@@ -496,21 +495,54 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
     _scrollToBottom();
   }
 
+  bool _isPolling = false;
+
   void _pollNewMessages() async {
-    if (!mounted || _isSending) return;
-    final docId = _doctor['id']?.toString() ?? 'psy_1';
-    final msgs = await _apiService.getDoctorChatMessages(
-      _bookingId,
-      doctorId: docId,
-      userUuid: _userUuid,
-    );
-    if (!mounted) return;
-    if (msgs.length != _messages.length ||
-        (msgs.isNotEmpty && _messages.isNotEmpty && msgs.last['id'] != _messages.last['id'])) {
-      setState(() {
-        _messages = msgs;
-      });
-      _scrollToBottom();
+    if (!mounted || _isPolling) return;
+    _isPolling = true;
+    try {
+      final docId = _doctor['id']?.toString() ?? 'psy_1';
+      final msgs = await _apiService.getDoctorChatMessages(
+        _bookingId,
+        doctorId: docId,
+        userUuid: _userUuid,
+      );
+      if (!mounted) return;
+
+      // Pertahankan pesan temporary yang belum ter-replace oleh server
+      final pendingTemp = _messages.where((m) => (m['id']?.toString() ?? '').startsWith('temp_')).toList();
+      final merged = List<Map<String, dynamic>>.from(msgs);
+      for (final temp in pendingTemp) {
+        final tempText = temp['message']?.toString() ?? '';
+        final alreadyPresent = merged.any((m) =>
+            m['message'] == tempText && m['sender_role'] == temp['sender_role']);
+        if (!alreadyPresent) {
+          merged.add(temp);
+        }
+      }
+
+      // Bandingkan apakah benar-benar ada data baru
+      bool hasChange = false;
+      if (merged.length != _messages.length) {
+        hasChange = true;
+      } else {
+        for (int i = 0; i < merged.length; i++) {
+          if (merged[i]['id'] != _messages[i]['id'] ||
+              merged[i]['message'] != _messages[i]['message']) {
+            hasChange = true;
+            break;
+          }
+        }
+      }
+
+      if (hasChange) {
+        setState(() {
+          _messages = merged;
+        });
+        _scrollToBottom();
+      }
+    } finally {
+      _isPolling = false;
     }
   }
 
@@ -544,15 +576,15 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
     }
 
     final text = prefilledText ?? _textController.text.trim();
-    if (text.isEmpty || _isSending) return;
+    if (text.isEmpty) return;
 
     final docId = _doctor['id']?.toString() ?? 'psy_1';
+    final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
 
     _textController.clear();
     setState(() {
-      _isSending = true;
       _messages.add({
-        'id': 'temp_${DateTime.now().millisecondsSinceEpoch}',
+        'id': tempId,
         'booking_id': _bookingId,
         'sender_id': _userUuid,
         'sender_name': _userName,
@@ -573,11 +605,14 @@ class _DoctorConsultationChatScreenState extends State<DoctorConsultationChatScr
     );
 
     if (!mounted) return;
-    setState(() => _isSending = false);
-    if (result == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pesan gagal dikirim. Periksa koneksi server.')),
-      );
+    if (result != null && result['message'] != null) {
+      final serverMsg = Map<String, dynamic>.from(result['message']);
+      setState(() {
+        final idx = _messages.indexWhere((m) => m['id'] == tempId);
+        if (idx != -1) {
+          _messages[idx] = serverMsg;
+        }
+      });
     }
   }
 

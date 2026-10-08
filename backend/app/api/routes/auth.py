@@ -213,12 +213,25 @@ def login(req: LoginRequest):
                 # Cari psychologist_id jika peran dokter
                 psychologist_id = None
                 if role == "doctor":
-                    try:
-                        p = admin_sp.table("psychologists").select("id").limit(1).execute()
-                        if p.data:
-                            psychologist_id = p.data[0].get("id")
-                    except Exception:
-                        psychologist_id = "psy_1"
+                    # 1. Dari metadata user jika tersimpan
+                    psychologist_id = user_meta.get("psychologist_id")
+                    # 2. Dari tabel psychologists berdasarkan nama jika belum ada
+                    if not psychologist_id and nickname:
+                        try:
+                            clean_name = nickname.split(",")[0].replace("dr.", "").strip()
+                            p = admin_sp.table("psychologists").select("id").ilike("name", f"%{clean_name}%").limit(1).execute()
+                            if p.data:
+                                psychologist_id = p.data[0].get("id")
+                        except Exception:
+                            pass
+                    # 3. Fallback ke dokter pertama jika masih belum ditemukan
+                    if not psychologist_id:
+                        try:
+                            p = admin_sp.table("psychologists").select("id").limit(1).execute()
+                            if p.data:
+                                psychologist_id = p.data[0].get("id")
+                        except Exception:
+                            psychologist_id = "psy_1"
 
                 token = login_res.session.access_token if login_res.session else None
 

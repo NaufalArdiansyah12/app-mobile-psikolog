@@ -9,6 +9,7 @@ import '../services/storage_service.dart';
 import '../widgets/breathing_bubble_widget.dart';
 import '../widgets/crisis_modal_overlay.dart';
 import '../widgets/grounding_widget.dart';
+import '../widgets/typing_indicator.dart';
 import '../theme/app_theme.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -800,24 +801,12 @@ class ChatScreenState extends State<ChatScreen> {
                             ],
                           ),
                           child: isThinking
-                              ? Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      "Sedang memikirkan...",
-                                      style: GoogleFonts.plusJakartaSans(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: const Color(0xFF94A3B8),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    const SizedBox(
-                                      width: 12,
-                                      height: 12,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0D9488)),
-                                    ),
-                                  ],
+                              ? const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  child: TypingIndicator(
+                                    dotColor: Color(0xFF0D9488),
+                                    dotSize: 7.5,
+                                  ),
                                 )
                               : Text(
                                   msg.content,

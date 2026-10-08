@@ -9,6 +9,7 @@ from app.models.schemas import (
     UpdateDoctorProfileRequest,
 )
 from app.api.routes.consultation import _inmemory_bookings
+from app.api.routes.user import _user_profile_meta
 
 router = APIRouter(prefix="/doctor", tags=["Dokter & Tenaga Ahli"])
 
@@ -284,10 +285,15 @@ def get_doctor_bookings(doctor_id: str = "psy_1"):
                 formatted = []
                 for b in res.data:
                     user_info = b.get("users") or {}
+                    uid = str(b.get("user_id") or "")
+                    cached_meta = _user_profile_meta.get(uid, {})
+                    patient_name = user_info.get("nickname") or cached_meta.get("nickname") or "Pasien MindPal"
+                    patient_avatar = user_info.get("avatar") or cached_meta.get("avatar")
                     formatted.append({
                         "id": b.get("id"),
                         "user_id": b.get("user_id"),
-                        "patient_name": user_info.get("nickname") or "Pasien MindPal",
+                        "patient_name": patient_name,
+                        "patient_avatar": patient_avatar,
                         "schedule_time": b.get("schedule_time") or "Jadwal belum ditentukan",
                         "notes": b.get("notes") or "Konsultasi keluhan kesehatan mental.",
                         "status": (b.get("status") or "pending").lower(),
@@ -302,10 +308,15 @@ def get_doctor_bookings(doctor_id: str = "psy_1"):
     if _inmemory_bookings:
         formatted = []
         for b in _inmemory_bookings:
+            uid = str(b.get("user_uuid") or b.get("user_id") or "")
+            cached_meta = _user_profile_meta.get(uid, {})
+            patient_name = b.get("patient_name") or cached_meta.get("nickname") or "Pasien MindPal"
+            patient_avatar = b.get("patient_avatar") or cached_meta.get("avatar")
             formatted.append({
                 "id": b.get("id"),
-                "user_id": b.get("user_uuid") or b.get("user_id"),
-                "patient_name": "Pasien MindPal",
+                "user_id": uid,
+                "patient_name": patient_name,
+                "patient_avatar": patient_avatar,
                 "schedule_time": b.get("schedule_time") or "Jadwal belum ditentukan",
                 "notes": b.get("notes") or "Konsultasi keluhan kesehatan mental.",
                 "status": (b.get("status") or "pending").lower(),

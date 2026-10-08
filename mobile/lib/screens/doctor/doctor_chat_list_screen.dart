@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
+import '../../widgets/doctor_avatar.dart';
 import 'doctor_chat_screen.dart';
 
 enum ConsultationSessionStatus {
@@ -399,36 +400,10 @@ class _DoctorChatListScreenState extends State<DoctorChatListScreen> {
               // Avatar Pasien
               Stack(
                 children: [
-                  Container(
-                    width: 46,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: isExpired
-                          ? null
-                          : isUpcoming
-                              ? const LinearGradient(
-                                  colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                )
-                              : const LinearGradient(
-                                  colors: [Color(0xFF0D9488), Color(0xFF0F766E)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                      color: isExpired ? const Color(0xFFF1F5F9) : null,
-                    ),
-                    child: Center(
-                      child: Text(
-                        patientInitial,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 17,
-                          color: isExpired ? const Color(0xFF64748B) : Colors.white,
-                        ),
-                      ),
-                    ),
+                  DoctorAvatar(
+                    avatarUrl: item['patient_avatar']?.toString(),
+                    size: 46,
+                    isCircle: true,
                   ),
                   if (!isExpired)
                     Positioned(
@@ -584,6 +559,7 @@ class _DoctorChatListScreenState extends State<DoctorChatListScreen> {
                       patientAge: item['patient_age'],
                       bookingNotes: notes,
                       scheduleTime: scheduleTime,
+                      aiScreening: item['ai_screening'] as Map<String, dynamic>?,
                     ),
                   ),
                 ).then((_) => _loadChats());

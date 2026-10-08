@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -296,33 +297,46 @@ class HomeScreenState extends State<HomeScreen> {
   String _nickname = 'Sobat';
   int _bannerIndex = 0;
   final PageController _bannerController = PageController();
+  Timer? _sliderTimer;
 
   List<MoodEntry> _recentMoods = []; // 7 hari terakhir
 
   final List<Map<String, dynamic>> _promoBanners = [
     {
-      'tag': 'PROMO KHUSUS',
-      'title': 'Diskon 30% Sesi Pertama\nBersama Psikolog',
-      'desc': 'Konseling online privat tanpa antre',
-      'buttonText': 'Klaim Sekarang',
-      'color': Color(0xFF0D9488),
-      'icon': Icons.local_offer_rounded,
+      'tag': 'KONSULTASI AHLI',
+      'title': 'Konseling Privat Bersama\nPsikolog & Psikiater',
+      'desc': 'Tenaga profesional klinis berizin resmi STR',
+      'buttonText': 'Pilih Psikolog',
+      'color': Color(0xFF006D77),
+      'icon': Icons.medical_services_rounded,
+      'targetTab': 3,
     },
     {
-      'tag': 'FITUR BARU',
+      'tag': 'FITUR AI 24/7',
       'title': 'Ruang Curhat AI 24/7\nBebas Penghakiman',
       'desc': 'Teman cerita kapan pun cemas melanda',
       'buttonText': 'Mulai Curhat',
       'color': Color(0xFF0F766E),
       'icon': Icons.chat_bubble_outline_rounded,
+      'targetTab': 2,
     },
     {
-      'tag': 'WORKSHOP KLINIS',
+      'tag': 'JURNAL & MOOD',
+      'title': 'Pantau Kondisi Emosi\nSecara Berkala',
+      'desc': 'Pahami pola emosi harian demi ketenangan pikiran',
+      'buttonText': 'Catat Mood',
+      'color': Color(0xFF0D9488),
+      'icon': Icons.mood_rounded,
+      'targetTab': 1,
+    },
+    {
+      'tag': 'PANDUAN KLINIS',
       'title': 'Atasi Overthinking &\nKecemasan Akut',
-      'desc': 'Panduan praktis dari psikiater spesialis',
-      'buttonText': 'Ikuti Workshop',
+      'desc': 'Teknik CBT & relaksasi terarah dari spesialis',
+      'buttonText': 'Jelajahi Solusi',
       'color': Color(0xFF115E59),
       'icon': Icons.self_improvement_rounded,
+      'targetTab': 3,
     },
   ];
 
@@ -405,10 +419,25 @@ class HomeScreenState extends State<HomeScreen> {
     _loadUser();
     loadMoodData();
     loadDoctors();
+    _startAutoSlide();
+  }
+
+  void _startAutoSlide() {
+    _sliderTimer?.cancel();
+    _sliderTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || !_bannerController.hasClients) return;
+      final nextIndex = (_bannerIndex + 1) % _promoBanners.length;
+      _bannerController.animateToPage(
+        nextIndex,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOutCubic,
+      );
+    });
   }
 
   @override
   void dispose() {
+    _sliderTimer?.cancel();
     _bannerController.dispose();
     super.dispose();
   }
@@ -495,6 +524,17 @@ class HomeScreenState extends State<HomeScreen> {
     if (mounted && name.isNotEmpty) {
       setState(() => _nickname = name);
     }
+    try {
+      final uuid = await _storage.getOrCreateUserUuid();
+      final remoteProfile = await _api.getUserProfile(uuid);
+      if (remoteProfile != null && mounted) {
+        final rName = remoteProfile['nickname']?.toString();
+        if (rName != null && rName.isNotEmpty) {
+          setState(() => _nickname = rName);
+          await _storage.setNickname(rName);
+        }
+      }
+    } catch (_) {}
   }
 
   void _showBreathingModal(BreathingTechnique technique) {
@@ -858,92 +898,100 @@ class HomeScreenState extends State<HomeScreen> {
                 itemBuilder: (context, index) {
                   final banner = _promoBanners[index];
                   final Color bannerColor = banner['color'] as Color;
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: bannerColor,
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: bannerColor.withValues(alpha: 0.28),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 7,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.22),
-                                  borderRadius: BorderRadius.circular(10),
+                  return GestureDetector(
+                    onTap: () {
+                      final targetTab = banner['targetTab'] as int?;
+                      if (targetTab != null) {
+                        widget.onNavigateTab?.call(targetTab);
+                      }
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: bannerColor,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: bannerColor.withValues(alpha: 0.28),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 7,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.22),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    banner['tag'],
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                      letterSpacing: 0.8,
+                                    ),
+                                  ),
                                 ),
-                                child: Text(
-                                  banner['tag'],
+                                const SizedBox(height: 6),
+                                Text(
+                                  banner['title'],
                                   style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 9.5,
+                                    fontSize: 15.5,
                                     fontWeight: FontWeight.w800,
                                     color: Colors.white,
-                                    letterSpacing: 0.8,
+                                    height: 1.25,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                banner['title'],
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 15.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  height: 1.25,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Text(
-                                  banner['buttonText'],
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: bannerColor,
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Text(
+                                    banner['buttonText'],
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: bannerColor,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          flex: 3,
-                          child: Center(
-                            child: Container(
-                              width: 68,
-                              height: 68,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.18),
-                              ),
-                              child: Icon(
-                                banner['icon'] as IconData,
-                                size: 36,
-                                color: Colors.white,
+                          Expanded(
+                            flex: 3,
+                            child: Center(
+                              child: Container(
+                                width: 68,
+                                height: 68,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white.withValues(alpha: 0.18),
+                                ),
+                                child: Icon(
+                                  banner['icon'] as IconData,
+                                  size: 36,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   );
                 },
@@ -1367,12 +1415,30 @@ class HomeScreenState extends State<HomeScreen> {
                     color: const Color(0xFF0F172A),
                   ),
                 ),
-                Text(
-                  'Tersedia Hari Ini',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF64748B),
+                InkWell(
+                  onTap: () => widget.onNavigateTab?.call(3),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Lihat Semua',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF0D9488),
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 11,
+                          color: Color(0xFF0D9488),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -1380,8 +1446,8 @@ class HomeScreenState extends State<HomeScreen> {
 
             const SizedBox(height: 12),
 
-            // List Nama-Nama Dokter / Psikolog Mental Health
-            ...List.generate(_doctors.length, (idx) {
+            // List Nama-Nama Dokter / Psikolog Mental Health (Maksimal 4 di Beranda)
+            ...List.generate(_doctors.take(4).length, (idx) {
               final doc = _doctors[idx];
               return InkWell(
                 onTap: () {
@@ -1478,7 +1544,14 @@ class HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 8),
                         InkWell(
-                          onTap: () => _showBookingSheet(doc),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => DoctorDetailScreen(doctor: doc),
+                              ),
+                            );
+                          },
                           borderRadius: BorderRadius.circular(16),
                           child: Container(
                             padding: const EdgeInsets.symmetric(

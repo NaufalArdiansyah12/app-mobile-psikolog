@@ -87,6 +87,26 @@ class UpdateDoctorProfileRequest(BaseModel):
     available_slots: Optional[List[str]] = None
     is_available: Optional[bool] = None
 
+class UpdateUserProfileRequest(BaseModel):
+    user_uuid: str
+    nickname: Optional[str] = None
+    avatar: Optional[str] = None
+    bio: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+class UserProfileResponse(BaseModel):
+    status: str
+    user_id: Optional[str] = None
+    device_uuid: Optional[str] = None
+    nickname: Optional[str] = None
+    avatar: Optional[str] = None
+    bio: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    role: Optional[str] = "user"
+    message: Optional[str] = None
+
 class ChargeRequest(BaseModel):
     user_uuid: str
     psychologist_id: str

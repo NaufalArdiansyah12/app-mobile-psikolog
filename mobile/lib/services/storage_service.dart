@@ -418,6 +418,21 @@ class StorageService {
     } catch (_) {}
   }
 
+  /// Ambil analisis AI sesi chat terakhir pengguna untuk keperluan triage/pre-screening dokter
+  Future<ChatAnalysisResult?> getLatestAiAnalysis() async {
+    try {
+      final sessions = await getChatSessions();
+      for (final s in sessions.reversed) {
+        if (s.analysis != null) {
+          return s.analysis;
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<bool> hasReviewedBooking(String bookingId) async {
     try {
       final prefs = await SharedPreferences.getInstance();

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
 import '../../services/storage_service.dart';
+import '../../widgets/ai_screening_modal.dart';
 
 enum DoctorChatSessionStatus {
   upcoming,
@@ -40,6 +41,7 @@ class DoctorChatScreen extends StatefulWidget {
   final String? doctorId;
   final String? userId;
   final String? scheduleTime;
+  final Map<String, dynamic>? aiScreening;
 
   const DoctorChatScreen({
     super.key,
@@ -50,6 +52,7 @@ class DoctorChatScreen extends StatefulWidget {
     this.doctorId,
     this.userId,
     this.scheduleTime,
+    this.aiScreening,
   });
 
   @override
@@ -87,7 +90,7 @@ class _DoctorChatScreenState extends State<DoctorChatScreen> {
         : 'Hari ini, 09:00 - 11:00';
     _initDoctorInfo();
     _fetchMessages();
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _pollNewMessages());
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _pollNewMessages());
   }
 
   @override
@@ -249,21 +252,51 @@ class _DoctorChatScreenState extends State<DoctorChatScreen> {
     _scrollToBottom();
   }
 
-  void _pollNewMessages() async {
-    if (!mounted || _isSending) return;
-    final msgs = await _apiService.getDoctorChatMessages(
-      widget.bookingId,
-      doctorId: _doctorId,
-      userId: widget.userId,
-    );
-    if (!mounted || _isSending) return;
+  bool _isPolling = false;
 
-    if (msgs.length != _messages.length ||
-        (msgs.isNotEmpty && _messages.isNotEmpty && msgs.last['id'] != _messages.last['id'])) {
-      setState(() {
-        _messages = List<Map<String, dynamic>>.from(msgs);
-      });
-      _scrollToBottom();
+  void _pollNewMessages() async {
+    if (!mounted || _isPolling) return;
+    _isPolling = true;
+    try {
+      final msgs = await _apiService.getDoctorChatMessages(
+        widget.bookingId,
+        doctorId: _doctorId,
+        userId: widget.userId,
+      );
+      if (!mounted) return;
+
+      final pendingTemp = _messages.where((m) => (m['id']?.toString() ?? '').startsWith('temp_')).toList();
+      final merged = List<Map<String, dynamic>>.from(msgs);
+      for (final temp in pendingTemp) {
+        final tempText = temp['message']?.toString() ?? '';
+        final alreadyPresent = merged.any((m) =>
+            m['message'] == tempText && m['sender_role'] == temp['sender_role']);
+        if (!alreadyPresent) {
+          merged.add(temp);
+        }
+      }
+
+      bool hasChange = false;
+      if (merged.length != _messages.length) {
+        hasChange = true;
+      } else {
+        for (int i = 0; i < merged.length; i++) {
+          if (merged[i]['id'] != _messages[i]['id'] ||
+              merged[i]['message'] != _messages[i]['message']) {
+            hasChange = true;
+            break;
+          }
+        }
+      }
+
+      if (hasChange) {
+        setState(() {
+          _messages = merged;
+        });
+        _scrollToBottom();
+      }
+    } finally {
+      _isPolling = false;
     }
   }
 
@@ -525,6 +558,23 @@ class _DoctorChatScreenState extends State<DoctorChatScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Riwayat Pre-Screening AI',
+            icon: const Icon(Icons.psychology_rounded, color: Color(0xFF0D9488), size: 24),
+            onPressed: () {
+              AiScreeningModal.show(
+                context,
+                patientName: widget.patientName,
+                screeningData: widget.aiScreening ?? {
+                  'distress_score': 2,
+                  'distress_level': 'Ringan',
+                  'dominant_emotions': ['Stabil'],
+                  'summary': 'Pasien ini belum memiliki catatan riwayat sesi curhat AI.',
+                  'cbt_insights': 'Indikasi kondisi emosi dalam batas normal.',
+                },
+              );
+            },
+          ),
           if (isActive)
             IconButton(
               tooltip: 'Selesaikan Sesi',
@@ -601,6 +651,65 @@ class _DoctorChatScreenState extends State<DoctorChatScreen> {
               ],
             ),
           ),
+
+          // Mini Triage Bar Pre-Screening AI Pasien
+          if (widget.aiScreening != null) ...[
+            Builder(builder: (context) {
+              final score = int.tryParse(widget.aiScreening!['distress_score']?.toString() ?? '4') ?? 4;
+              final level = widget.aiScreening!['distress_level']?.toString() ?? (score <= 3 ? 'Ringan' : score <= 6 ? 'Sedang' : 'Berat');
+              final color = score <= 3
+                  ? const Color(0xFF10B981)
+                  : score <= 6
+                      ? const Color(0xFFF59E0B)
+                      : const Color(0xFFEF4444);
+
+              return InkWell(
+                onTap: () {
+                  AiScreeningModal.show(
+                    context,
+                    patientName: widget.patientName,
+                    screeningData: widget.aiScreening!,
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.08),
+                    border: Border(
+                      bottom: BorderSide(color: color.withValues(alpha: 0.2), width: 1),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.insights_rounded, size: 16, color: color),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Pre-Screening AI: Distress $score/10 ($level)",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: color,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        "Lihat Detail",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: color,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      Icon(Icons.arrow_forward_ios_rounded, size: 10, color: color),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
 
           // Catatan Keluhan Pasien Jika Ada
           if (widget.bookingNotes != null && widget.bookingNotes!.isNotEmpty)

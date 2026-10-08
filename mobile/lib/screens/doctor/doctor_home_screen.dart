@@ -5,6 +5,7 @@ import '../../services/api_service.dart';
 import '../../services/storage_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/doctor_avatar.dart';
+import '../../widgets/ai_screening_modal.dart';
 import 'doctor_chat_screen.dart';
 
 class DoctorHomeScreen extends StatefulWidget {
@@ -947,6 +948,64 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
                 ),
               ),
 
+              // AI Pre-Screening Badge Preview Jika Ada
+              if (b['ai_screening'] != null) ...[
+                Builder(builder: (context) {
+                  final ai = b['ai_screening'] as Map<String, dynamic>;
+                  final score = int.tryParse(ai['distress_score']?.toString() ?? '4') ?? 4;
+                  final level = ai['distress_level']?.toString() ?? (score <= 3 ? 'Ringan' : score <= 6 ? 'Sedang' : 'Berat');
+                  final color = score <= 3
+                      ? const Color(0xFF047857)
+                      : score <= 6
+                          ? const Color(0xFFB45309)
+                          : const Color(0xFFB91C1C);
+
+                  return Container(
+                    margin: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: color.withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.psychology_rounded, size: 14, color: color),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            "AI Triase: Distress $score/10 ($level)",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: color,
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            AiScreeningModal.show(
+                              context,
+                              patientName: patientName,
+                              screeningData: ai,
+                            );
+                          },
+                          child: Text(
+                            "Detail",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: color,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+
               const SizedBox(height: 12),
 
               // Action Button
@@ -977,6 +1036,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
                             patientName: patientName,
                             bookingNotes: notes,
                             scheduleTime: b['schedule_time']?.toString(),
+                            aiScreening: b['ai_screening'] as Map<String, dynamic>?,
                           ),
                         ),
                       );
